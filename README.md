@@ -49,7 +49,7 @@
 |---|---|
 | **Frontend** | React 19, Vite 6, Tailwind CSS v4, `motion` (Framer Motion) |
 | **Backend** | Express 4, tsx runtime, Node 22+ |
-| **AI Voice** | Gemini 2.5 Flash Live API (`@google/genai`) |
+| **AI Voice** | Gemini 2.5 Flash Native Audio (`gemini-2.5-flash-native-audio-preview-12-2025`) |
 | **Auth** | Firebase Auth (Google OAuth) |
 | **Database** | Supabase (PostgreSQL + Storage) |
 | **WhatsApp** | Baileys (`@whiskeysockets/baileys`) |
