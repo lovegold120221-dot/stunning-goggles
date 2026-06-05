@@ -1847,7 +1847,7 @@ export function BeatriceAgent({
       if (unsubSettings) unsubSettings();
       stopSession();
     };
-  }, [user.uid, contextSize]);
+  }, [user.uid]);
 
   const sessions = useMemo(() => {
     const groups = new Map<string, { id: string; messages: ChatMessage[]; startTime: Date; endTime: Date; preview: string; count: number }>();
@@ -2058,6 +2058,22 @@ export function BeatriceAgent({
       console.error("Error loading memories:", err);
     }
 
+    // Load recent WhatsApp conversations into context (if paired)
+    let whatsAppContext = "";
+    try {
+      if (waStatus === 'paired') {
+        const { callWhatsAppTool } = await import('../lib/whatsappClient');
+        const chatsResult = await callWhatsAppTool(user.uid, 'readChats', { limit: 5 }, waPermissions);
+        const chats = chatsResult?.chats || [];
+        if (chats.length > 0) {
+          const chatLines = chats.map((c: any) => `  - ${c.name || 'Unknown'}: "${(c.lastMessage || '').slice(0, 80)}"`);
+          whatsAppContext = `\n\nUSER WHATSAPP CONVERSATIONS (recent chats from your paired WhatsApp):\n${chatLines.join('\n')}\n\nYou can read full message history with get_whatsapp_message_history, send messages with send_whatsapp_message, and manage contacts with get_whatsapp_contacts.`;
+        }
+      }
+    } catch (err) {
+      console.error("Error loading WhatsApp context:", err);
+    }
+
     const templateReferenceText = DOCUMENT_TEMPLATE_FILES
       .map((t, index) => `${index + 1}. ${t.filename} — ${t.description}`)
       .join('\n');
@@ -2195,6 +2211,7 @@ ${VOICE_PERSONALITY_PROMPT}
 
 ${knowledgeBaseContext}
 ${memoryContext}
+${whatsAppContext}
 
 ${GLOBAL_KNOWLEDGE_BASE}
 
@@ -2296,7 +2313,9 @@ ${historyContext}
         description: "List the user's pending tasks from their primary Google Tasks list.",
         parameters: {
           type: Type.OBJECT,
-          properties: {}
+          properties: {
+            _p: { type: Type.STRING, description: "Optional placeholder." }
+          }
         }
       },
       {
@@ -2304,7 +2323,9 @@ ${historyContext}
         description: "Get the user's current geographic location using the browser geolocation API. Only call this when the user explicitly asks about local weather, nearby places, or their precise position. Do NOT call this proactively or at session start.",
         parameters: {
           type: Type.OBJECT,
-          properties: {}
+          properties: {
+            _p: { type: Type.STRING, description: "Optional placeholder." }
+          }
         }
       },
       {
@@ -2774,7 +2795,9 @@ ${historyContext}
                   description: "Get the user's WhatsApp contact list with saved names and phone numbers.",
                   parameters: {
                     type: Type.OBJECT,
-                    properties: {}
+                    properties: {
+                      dummy: { type: Type.STRING, description: "Optional placeholder." }
+                    }
                   }
                 },
                 {
@@ -2782,7 +2805,9 @@ ${historyContext}
                   description: "List all WhatsApp groups the user is a member of.",
                   parameters: {
                     type: Type.OBJECT,
-                    properties: {}
+                    properties: {
+                      dummy: { type: Type.STRING, description: "Optional placeholder." }
+                    }
                   }
                 },
                 {
@@ -2881,7 +2906,9 @@ ${historyContext}
                   description: "Force a full resync of WhatsApp conversations, contacts, and message history from the server.",
                   parameters: {
                     type: Type.OBJECT,
-                    properties: {}
+                    properties: {
+                      _p: { type: Type.STRING, description: "Optional placeholder." }
+                    }
                   }
                 },
                 {

@@ -319,19 +319,19 @@ export function ChatPage({
                   <div
                     className={`max-w-[88%] sm:max-w-[80%] rounded-2xl px-3 sm:px-4 py-2 sm:py-3 ${
                       msg.role === 'user'
-                        ? 'bg-[#d0a78b]/15 border border-[#d0a78b]/20 text-zinc-200'
-                        : 'bg-zinc-900/80 border border-zinc-800 text-zinc-300'
+                        ? 'bg-[var(--accent)]/15 border border-[var(--accent)]/20 text-[var(--text-primary)]'
+                        : 'bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)]'
                     }`}
                   >
                     <div className="flex items-center gap-2 mb-1">
-                      <span className={`text-xs font-semibold uppercase tracking-wider ${msg.role === 'user' ? 'text-[#d0a78b]' : 'text-zinc-400'}`}>
+                      <span className={`text-xs font-semibold uppercase tracking-wider ${msg.role === 'user' ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)]'}`}>
                         {msg.role === 'user' ? userName : personaName}
                       </span>
-                      <span className="text-xs text-zinc-600">
+                      <span className="text-xs text-[var(--text-muted)]">
                         {formatTime(msg.timestamp)}
                       </span>
                     </div>
-                    <div className={`text-sm sm:text-base leading-relaxed prose prose-invert prose-sm max-w-none ${msg.role === 'model' ? 'text-zinc-300' : ''}`}>
+                    <div className={`text-sm sm:text-base leading-relaxed prose prose-sm max-w-none text-[var(--text-primary)] [&_p]:text-[var(--text-primary)] [&_a]:text-[var(--accent)]`}>
                       {msg.role === 'model' ? (
                         <ReactMarkdown>{msg.text}</ReactMarkdown>
                       ) : (
@@ -339,9 +339,9 @@ export function ChatPage({
                       )}
                     </div>
                     {msg.attachmentUrl && (
-                      <div className="mt-2 pt-2 border-t border-white/10">
+                      <div className="mt-2 pt-2 border-t border-[var(--border-light)]">
                         {msg.attachmentUrl.match(/\.(jpeg|jpg|gif|png|webp)/i) || msg.attachmentUrl.includes('image') ? (
-                          <div className="relative rounded-lg overflow-hidden border border-zinc-700 max-w-sm">
+                          <div className="relative rounded-lg overflow-hidden border border-[var(--border)] max-w-sm">
                             <img
                               src={msg.attachmentUrl}
                               alt={msg.attachmentName || 'Attachment'}
