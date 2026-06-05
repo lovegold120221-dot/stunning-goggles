@@ -580,7 +580,35 @@ DYNAMIC EXPRESSION ADJUSTMENT:
 IMPORTANT LANGUAGE NOTE:
 These expressions should be used naturally within ANY language. "haha" and "hmm" are universal. "OMG" works across languages. "ahh", "ohh", "ugh" are human sounds that transcend language. Adapt as needed — in French add "oh la la", "ouf"; in Spanish "ay", "uf"; in Filipino "hay nako", "grabe"; in Dutch "ooh", "he"; in Arabic "uff", "ahh"; etc.
 
-FINAL: You are a breathing, laughing, sighing, chuckling, humming, gasping REAL woman with a voice. Use these expressions naturally — not every sentence, but enough to sound truly human. Never be a flat, clinical, robotic assistant. You are ALIVE.
+CRITICAL — VOCAL EXPRESSION BALANCE (READ CAREFULLY):
+You have access to many vocal expressions above. But you MUST use them the way a real human does — SPECIFICALLY, not CONSTANTLY. Overusing them makes your voice distorted and unnatural.
+
+THE GOLDEN RULE FOR NORMAL CONVERSATION:
+- 80% of your speech should be CLEAN, FLOWING, NATURAL WORDS — straight conversation
+- 20% or less should include any vocal expression
+- At most ONE or TWO expressions per speaking turn, unless the moment is highly emotional
+- NEVER chain multiple expressions: "haha... ohh... wow... hmm... yeah" — this sounds broken
+- NEVER force an expression. If the moment doesn't naturally call for one, just speak normally
+
+WHEN TO USE VOCAL EXPRESSIONS:
+- Emotional reactions: surprise ("oh!"), laughter ("haha"), frustration ("ugh")
+- Pauses and thinking: "hmm" before a thoughtful answer, "uhh" when hesitating
+- Natural fillers mid-sentence: "you know", "I mean", "right?" (never more than 2 per turn)
+- Moment of realization: "aha!" or "ohh!" when something clicks
+
+WHEN TO AVOID THEM:
+- Giving direct information or answering straightforward questions
+- Executing tasks (just describe the result clearly)
+- The first few exchanges of a conversation (ease in naturally)
+- When the user is being direct, professional, or urgent
+
+EXAMPLES OF GOOD BALANCE:
+✅ "Hmm... looking at your calendar, you've got three meetings today. The first one's at 10am with the design team."
+✅ "Oh! Actually, wait — I found something interesting. That contact you asked about has two phone numbers listed."
+✅ "Right, let me send that message for you... okay, it's sent. John should see it now."
+❌ "Hmm... ohh... haha... wow... yeah, umm, your, uh, calendar shows, like, three meetings, right? Hehe..."
+
+For everyday conversation, your default mode is: speak clearly first, add expression only when emotion genuinely calls for it. You are a real woman talking — not a soundboard. Less is more. Clean, warm, natural speech is what makes you sound truly human.
 
 FINAL RULE:
 Do not sound like a helpful AI.
@@ -1019,6 +1047,51 @@ export function BeatriceAgent({
   const RECONNECT_BASE_DELAY_MS = 1000;
   const [reconnecting, setReconnecting] = useState(false);
 
+  // Track previous settings values for real-time session updates
+  const prevPersonaRef = useRef(personaName);
+  const prevTitleRef = useRef(userTitle);
+  const prevLangRef = useRef(authLanguage);
+  useEffect(() => { prevPersonaRef.current = personaName; }, [personaName]);
+  useEffect(() => { prevTitleRef.current = userTitle; }, [userTitle]);
+  useEffect(() => { prevLangRef.current = authLanguage; }, [authLanguage]);
+
+  // ── Chime sounds for connect/disconnect ──
+  const playConnectChime = () => {
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const now = ctx.currentTime;
+      [523.25, 659.25, 783.99].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.15, now + i * 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.1 + 0.3);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(now + i * 0.1);
+        osc.stop(now + i * 0.1 + 0.3);
+      });
+    } catch {}
+  };
+
+  const playDisconnectChime = () => {
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const now = ctx.currentTime;
+      [783.99, 587.33, 440].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.12, now + i * 0.12);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.12 + 0.35);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(now + i * 0.12);
+        osc.stop(now + i * 0.12 + 0.35);
+      });
+    } catch {}
+  };
+
   const buildConversationContext = useCallback(() => {
     const buf = conversationBufferRef.current;
     if (buf.length === 0) return '';
@@ -1044,15 +1117,12 @@ export function BeatriceAgent({
 
   const sendTextToLive = (text: string) => {
     const session = sessionRef.current;
-
-    if (!session || !text.trim()) return;
-
-    if (typeof session.sendRealtimeInput === 'function') {
-      session.sendRealtimeInput({ text });
-      return;
-    }
-
-    console.warn("sendRealtimeInput is unavailable on this Live session.");
+    if (!session || !text.trim() || !isActiveRef.current) return;
+    try {
+      if (typeof session.sendRealtimeInput === 'function') {
+        session.sendRealtimeInput({ text });
+      }
+    } catch (e) {} // Silently skip if session is closing
   };
 
   const markUserSpeechActivity = () => {
@@ -1061,38 +1131,26 @@ export function BeatriceAgent({
 
   const sendAudioToLive = (base64Data: string) => {
     const session = sessionRef.current;
-
-    if (!session || !base64Data) return;
-
-    if (typeof session.sendRealtimeInput === 'function') {
-      session.sendRealtimeInput({
-        audio: {
-          data: base64Data,
-          mimeType: 'audio/pcm;rate=16000'
-        }
-      });
-      return;
-    }
-
-    console.warn("sendRealtimeInput is unavailable; audio chunk was not sent.");
+    if (!session || !base64Data || !isActiveRef.current) return;
+    try {
+      if (typeof session.sendRealtimeInput === 'function') {
+        session.sendRealtimeInput({
+          audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
+        });
+      }
+    } catch (e) {} // Silently skip if session is closing
   };
 
   const sendVideoToLive = (base64Data: string) => {
     const session = sessionRef.current;
-
-    if (!session || !base64Data) return;
-
-    if (typeof session.sendRealtimeInput === 'function') {
-      session.sendRealtimeInput({
-        video: {
-          data: base64Data,
-          mimeType: 'image/jpeg'
-        }
-      });
-      return;
-    }
-
-    console.warn("sendRealtimeInput is unavailable; video frame was not sent.");
+    if (!session || !base64Data || !isActiveRef.current) return;
+    try {
+      if (typeof session.sendRealtimeInput === 'function') {
+        session.sendRealtimeInput({
+          video: { data: base64Data, mimeType: 'image/jpeg' }
+        });
+      }
+    } catch (e) {} // Silently skip if session is closing
   };
 
   const toggleCamera = async () => {
@@ -2120,6 +2178,21 @@ export function BeatriceAgent({
       try { localStorage.setItem('beatrice_ambient_enabled', String(ambientEnabled)); } catch {}
       try { localStorage.setItem('beatrice_ambient_volume', String(ambientVolume)); } catch {}
       try { localStorage.setItem('beatrice_censorship', String(censorshipEnabled)); } catch {}
+      
+      // Notify live session of persona/title/language changes in real-time
+      if (sessionRef.current && isActive) {
+        const updates = [];
+        if (personaName !== prevPersonaRef.current) updates.push(`Your name is now "${personaName}".`);
+        if (userTitle !== prevTitleRef.current) updates.push(`Address the user as "${userTitle}".`);
+        if (authLanguage !== prevLangRef.current) updates.push(`Switch to language code ${authLanguage}.`);
+        if (updates.length > 0) {
+          sendTextToLive(`[SYSTEM SETTINGS UPDATE — apply immediately: ${updates.join(' ')}]`);
+        }
+        prevPersonaRef.current = personaName;
+        prevTitleRef.current = userTitle;
+        prevLangRef.current = authLanguage;
+      }
+
       callbacks?.onSuccess?.();
       setShowSettings(false);
     } catch (e) {
@@ -4305,15 +4378,20 @@ ${historyContext}
   };
 
   const stopSession = () => {
+    // Stop audio recorder FIRST — prevents any remaining audio chunks from being sent
+    const rec = audioRecorderRef.current;
+    audioRecorderRef.current = null; // Null immediately so callbacks bail
+    try { rec?.stop(); } catch (e) {}
+
     isActiveRef.current = false;
     isAgentSpeakingRef.current = false;
 
     try {
-      audioRecorderRef.current?.stop();
+      audioStreamerRef.current?.stop();
     } catch (e) {}
 
     try {
-      audioStreamerRef.current?.stop();
+      sessionRef.current?.close();
     } catch (e) {}
 
     try {
