@@ -4209,6 +4209,133 @@ ${historyContext}
     );
   }
 
+  if (showSettings) {
+    return (
+      <div className="min-h-screen bg-[var(--bg-base)] text-[var(--text-primary)] flex flex-col h-[100dvh]">
+        <header className="sticky top-0 w-full bg-[var(--bg-glass)] backdrop-blur-2xl border-b border-[var(--border)] px-4 py-3 flex items-center justify-between z-10 shrink-0">
+          <div className="w-16" />
+          <h1 className="text-base font-semibold tracking-wide text-[var(--text-primary)]">Agent Settings</h1>
+          <button
+            onClick={() => setShowSettings(false)}
+            className="w-16 text-right text-sm font-semibold text-[var(--accent)] hover:text-[var(--text-primary)] transition-colors"
+            aria-label="Done"
+          >Done</button>
+        </header>
+
+        <div className="flex-1 overflow-y-auto px-4 py-6 pb-24 w-full max-w-lg mx-auto space-y-8">
+
+          {/* Google Integration */}
+          <section className="space-y-3">
+            <h2 className="text-[11px] font-bold tracking-[0.2em] uppercase text-[var(--text-muted)] mb-3 px-1">Google Integration</h2>
+            <div className="rounded-2xl border border-[var(--border)] overflow-hidden bg-[var(--bg-card)]">
+              <div className="p-5 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className={`w-1.5 h-1.5 rounded-full ${isGoogleLinked(user) ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)] animate-pulse' : 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]'}`} />
+                  <span className={`text-[11px] font-bold uppercase tracking-wider ${isGoogleLinked(user) ? 'text-emerald-400' : 'text-amber-500'}`}>
+                    {isGoogleLinked(user) ? 'Connected' : 'Not Connected'}
+                  </span>
+                </div>
+                <button onClick={onLogin} className="px-4 py-2 bg-[var(--accent)] hover:brightness-110 active:scale-95 rounded-xl text-xs font-bold text-[var(--accent-text)] transition-all cursor-pointer">
+                  {googleToken ? 'Reconnect' : 'Connect'}
+                </button>
+              </div>
+              <div className="px-5 pb-4">
+                <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed font-medium">
+                  {googleToken ? 'Gmail, Calendar, Drive, Tasks, YouTube and Contacts are connected.' : 'Connect to enable Google services on Beatrice\'s voice pipeline.'}
+                </p>
+              </div>
+            </div>
+          </section>
+
+          {/* Room Tone */}
+          <section className="space-y-3">
+            <h2 className="text-[11px] font-bold tracking-[0.2em] uppercase text-[var(--text-muted)] mb-3 px-1">Room Tone</h2>
+            <div className="rounded-2xl border border-[var(--border)] overflow-hidden bg-[var(--bg-card)]">
+              <div className="px-5 py-4 flex items-center justify-between border-b border-[var(--border-light)]">
+                <div className="flex flex-col gap-0.5 pr-4">
+                  <span className="text-[14px] text-[var(--text-primary)] font-semibold tracking-tight">Enable Ambient Sound</span>
+                  <span className="text-[11px] text-[var(--text-muted)] font-medium">Calming background office/cafe bed during calls</span>
+                </div>
+                <button onClick={() => setAmbientEnabled(v => !v)} aria-pressed={ambientEnabled}
+                  className={`w-10 h-6 rounded-full transition-all duration-300 flex items-center shrink-0 cursor-pointer ${ambientEnabled ? 'bg-[var(--accent)]' : 'bg-zinc-800'}`}>
+                  <span className={`block w-4.5 h-4.5 rounded-full bg-white transition-all duration-300 shadow-md ${ambientEnabled ? 'ml-[18px]' : 'ml-[3px]'}`} />
+                </button>
+              </div>
+              <div className="px-5 py-4 flex items-center gap-4">
+                <label htmlFor="ambient-volume-slider" className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-semibold shrink-0 w-8">Vol</label>
+                <input id="ambient-volume-slider" type="range" min="0" max="20" step="1" value={ambientVolume}
+                  onChange={(e) => setAmbientVolume(parseInt(e.target.value, 10))} disabled={!ambientEnabled}
+                  className="w-full h-1.5 bg-zinc-800/50 accent-[var(--accent)] rounded-lg appearance-none cursor-pointer disabled:opacity-30" />
+                <span className="text-xs font-mono font-bold text-[var(--text-secondary)] shrink-0 w-6 text-right">{ambientVolume}</span>
+              </div>
+            </div>
+          </section>
+
+          {/* Appearance */}
+          <section className="space-y-3">
+            <h2 className="text-[11px] font-bold tracking-[0.2em] uppercase text-[var(--text-muted)] mb-3 px-1">Appearance</h2>
+            <div className="rounded-2xl border border-[var(--border)] overflow-hidden bg-[var(--bg-card)]">
+              <div className="px-5 py-4 flex items-center justify-between">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[14px] text-[var(--text-primary)] font-semibold tracking-tight">Theme</span>
+                  <span className="text-[11px] text-[var(--text-muted)] font-medium">{theme === 'dark' ? 'Dark mode' : 'Light mode'}</span>
+                </div>
+                <button onClick={onToggleTheme} className="relative w-[68px] h-[34px] rounded-full bg-zinc-800/60 border border-zinc-700/50 flex items-center px-1 transition-all cursor-pointer">
+                  <div className={`absolute left-1 w-[26px] h-[26px] rounded-full flex items-center justify-center transition-all duration-300 shadow-lg ${theme === 'light' ? 'translate-x-[34px] bg-zinc-100' : 'translate-x-0 bg-zinc-900'}`}>
+                    {theme === 'dark' ? <Moon className="w-3.5 h-3.5 text-zinc-300" strokeWidth={2} /> : <Sun className="w-3.5 h-3.5 text-amber-500" strokeWidth={2} />}
+                  </div>
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <WhatsAppSettings userId={user.uid} waPermissions={waPermissions} onTogglePermission={toggleWaPermission} />
+
+          {/* Skills Dashboard */}
+          <section className="space-y-3">
+            <h2 className="text-[11px] font-bold tracking-[0.2em] uppercase text-[var(--text-muted)] mb-3 px-1">Skills & Capabilities</h2>
+            <div className="rounded-2xl border border-[var(--border)] overflow-hidden bg-[var(--bg-card)]">
+              <div className="px-5 py-3 border-b border-[var(--border-light)]">
+                <span className="text-[10px] font-bold tracking-[0.15em] uppercase text-[var(--text-muted)]">Google Services</span>
+              </div>
+              {[
+                { key: 'gmail', label: 'Gmail', desc: 'Read and send emails' },
+                { key: 'calendar', label: 'Calendar', desc: 'View events and schedules' },
+                { key: 'tasks', label: 'Tasks', desc: 'Manage to-do lists' },
+                { key: 'drive', label: 'Drive', desc: 'List and search files' },
+                { key: 'youtube', label: 'YouTube', desc: 'Search and discover videos' },
+              ].map((s, i, arr) => (
+                <div key={s.key} className={`px-5 py-4 flex items-center justify-between ${i !== arr.length - 1 ? 'border-b border-[var(--border-light)]' : ''}`}>
+                  <div className="flex flex-col gap-0.5 pr-4">
+                    <span className="text-[14px] text-[var(--text-primary)] font-semibold tracking-tight">{s.label}</span>
+                    <span className="text-[11px] text-[var(--text-muted)] font-medium leading-relaxed">{s.desc}</span>
+                  </div>
+                  <button
+                    onClick={onLogin}
+                    aria-pressed={!!googleToken}
+                    className={`w-10 h-6 rounded-full transition-all duration-300 flex items-center shrink-0 cursor-pointer ${googleToken ? 'bg-[var(--accent)]' : 'bg-zinc-800'}`}
+                  >
+                    <span className={`block w-4.5 h-4.5 rounded-full bg-white transition-all duration-300 shadow-md ${googleToken ? 'ml-[18px]' : 'ml-[3px]'}`} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Save */}
+          <section className="pt-4">
+            <button onClick={() => saveSettings()} disabled={isSaving}
+              className="w-full p-4 bg-[var(--accent)] hover:brightness-110 active:scale-[0.98] disabled:opacity-50 rounded-2xl text-center transition-all cursor-pointer shadow-[0_6px_24px_rgba(208,167,139,0.25)] flex items-center justify-center gap-2">
+              {isSaving ? <Loader2 className="w-5 h-5 animate-spin text-[var(--accent-text)]" /> : <Save className="w-5 h-5 text-[var(--accent-text)]" />}
+              <span className="text-[15px] font-bold tracking-tight text-[var(--accent-text)]">Save Settings</span>
+            </button>
+          </section>
+
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[var(--bg-base)] text-[var(--text-primary)] flex flex-col h-[100dvh] overflow-y-auto select-none relative">
       <audio ref={bgAudioRef} src="/office.mp3" loop crossOrigin="anonymous" className="hidden" />
@@ -4519,173 +4646,6 @@ ${historyContext}
       </div>
 
       <AnimatePresence>
-        {showSettings && (
-          <motion.div
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
-            transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="fixed inset-0 z-50 bg-[var(--bg-base)] flex flex-col h-full sm:rounded-t-[32px] sm:overflow-hidden sm:mt-12 shadow-2xl"
-          >
-            <header className="sticky top-0 w-full bg-[var(--bg-glass)] backdrop-blur-2xl border-b border-[var(--border)] px-4 py-3 flex items-center justify-between z-10 shrink-0">
-              <div className="w-16" />
-              <h3 className="text-base font-['SF_Pro_Display',system-ui,sans-serif] font-semibold tracking-tight text-[var(--text-primary)]">Agent Settings</h3>
-              <button
-                onClick={() => setShowSettings(false)}
-                className="w-16 text-right text-sm font-['SF_Pro_Text',system-ui,sans-serif] font-semibold text-[var(--accent)] hover:text-[var(--text-primary)] transition-colors active:scale-95"
-                aria-label="Done"
-              >
-                Done
-              </button>
-            </header>
-
-            <div className="flex-1 overflow-y-auto px-4 py-6 pb-24 w-full max-w-lg mx-auto space-y-8">
-              
-              {/* Google Integration */}
-              <section className="space-y-3">
-                <h2 className="text-[11px] font-['SF_Pro_Text',system-ui,sans-serif] font-bold tracking-[0.2em] uppercase text-white/40 mb-3 px-1">Google Integration</h2>
-                <div className="bg-white/[0.02] backdrop-blur-md border border-white/[0.04] rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-hidden transition-all duration-300 hover:border-white/[0.07] hover:bg-white/[0.03]">
-                  <div className="p-5 flex flex-col gap-4">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-2 bg-black/35 px-3 py-1.5 rounded-full border border-white/[0.02]">
-                        <div className={`w-1.5 h-1.5 rounded-full ${isGoogleLinked(user) ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)] animate-pulse' : 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]'}`} />
-                        <span className={`text-[11px] font-bold uppercase tracking-wider ${isGoogleLinked(user) ? 'text-emerald-400' : 'text-amber-500'}`}>
-                          {isGoogleLinked(user) ? 'Authenticated' : 'Connection Required'}
-                        </span>
-                      </div>
-                      <button
-                        onClick={onLogin}
-                        className="px-4 py-2 bg-[#d0a78b] hover:brightness-110 active:scale-95 rounded-xl text-xs font-bold text-black shadow-[0_4px_16px_rgba(208,167,139,0.2)] hover:shadow-[0_4px_20px_rgba(208,167,139,0.35)] transition-all duration-200 cursor-pointer"
-                      >
-                        {googleToken ? 'Connected' : 'Connect Now'}
-                      </button>
-                    </div>
-                    <p className="text-[11px] text-zinc-400 leading-relaxed font-medium">
-                      {googleToken
-                        ? 'Gmail, Calendar, Drive, Tasks, and YouTube are connected.'
-                        : 'Connect to enable Gmail, Calendar, Drive, Tasks, and YouTube on Beatrice\'s voice pipeline.'}
-                    </p>
-                  </div>
-                </div>
-              </section>
-
-              {/* Room Tone */}
-              <section className="space-y-3">
-                <h2 className="text-[11px] font-['SF_Pro_Text',system-ui,sans-serif] font-bold tracking-[0.2em] uppercase text-white/40 mb-3 px-1">Room Tone</h2>
-                <div className="bg-white/[0.02] backdrop-blur-md border border-white/[0.04] rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-hidden transition-all duration-300 hover:border-white/[0.07] hover:bg-white/[0.03]">
-                  <div className="p-5 border-b border-white/[0.03] flex items-center justify-between">
-                    <div className="flex flex-col gap-0.5 pr-4">
-                      <span className="text-[14px] text-zinc-100 font-bold tracking-wide">Enable Ambient Sound</span>
-                      <span className="text-[11px] text-zinc-400 font-medium leading-relaxed">Add a calming background office/cafe bed during calls</span>
-                    </div>
-                    <button
-                      onClick={() => setAmbientEnabled(v => !v)}
-                      aria-pressed={ambientEnabled}
-                      aria-label="Toggle Ambient Sound"
-                      title="Toggle Ambient Sound"
-                      className={`w-10 h-6 rounded-full transition-all duration-300 flex items-center shrink-0 cursor-pointer ${ambientEnabled ? 'bg-[#d0a78b] shadow-[0_0_10px_rgba(208,167,139,0.3)]' : 'bg-zinc-800'}`}
-                    >
-                      <span className={`block w-4.5 h-4.5 rounded-full bg-white transition-all duration-300 shadow-md ${ambientEnabled ? 'ml-[18px]' : 'ml-[3px]'}`} />
-                    </button>
-                  </div>
-                  <div className="p-5 flex items-center gap-4 bg-white/[0.005]">
-                    <label htmlFor="ambient-volume-slider" className="text-[11px] uppercase tracking-wider text-zinc-400 font-semibold shrink-0 w-8">Vol</label>
-                    <input
-                      id="ambient-volume-slider"
-                      type="range"
-                      min="0"
-                      max="20"
-                      step="1"
-                      value={ambientVolume}
-                      onChange={(e) => setAmbientVolume(parseInt(e.target.value, 10))}
-                      disabled={!ambientEnabled}
-                      className="w-full h-1.5 bg-black/40 border border-white/[0.05] accent-[#d0a78b] rounded-lg appearance-none cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-300"
-                      aria-label="Ambient Volume"
-                      title="Ambient Volume"
-                    />
-                    <span className="text-xs font-mono font-bold text-zinc-300 shrink-0 w-6 text-right">{ambientVolume}</span>
-                  </div>
-                </div>
-              </section>
-
-              <WhatsAppSettings 
-                userId={user.uid} 
-                waPermissions={waPermissions}
-                onTogglePermission={toggleWaPermission}
-              />
-
-              {/* Theme Toggle */}
-              <section className="space-y-3">
-                <h2 className="text-[11px] font-['SF_Pro_Text',system-ui,sans-serif] font-bold tracking-[0.2em] uppercase text-white/40 mb-3 px-1">Appearance</h2>
-                <div className="bg-white/[0.02] backdrop-blur-md border border-white/[0.04] rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-hidden transition-all duration-300 hover:border-white/[0.07] hover:bg-white/[0.03]">
-                  <div className="p-5 flex items-center justify-between">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[14px] text-zinc-100 font-bold tracking-wide">Theme</span>
-                      <span className="text-[11px] text-zinc-400 font-medium leading-relaxed">{theme === 'dark' ? 'Dark mode — easy on the eyes' : 'Light mode — bright and clean'}</span>
-                    </div>
-                    <button
-                      onClick={onToggleTheme}
-                      className="relative w-[68px] h-[34px] rounded-full bg-zinc-800/60 border border-zinc-700/50 flex items-center px-1 transition-all duration-300 hover:border-accent/30 active:scale-95 cursor-pointer"
-                      aria-label="Toggle theme"
-                    >
-                      <div className={`absolute left-1 w-[26px] h-[26px] rounded-full bg-zinc-900 flex items-center justify-center transition-all duration-300 shadow-lg ${theme === 'light' ? 'translate-x-[34px] bg-zinc-100' : 'translate-x-0'}`}>
-                        {theme === 'dark' ? (
-                          <Moon className="w-3.5 h-3.5 text-zinc-300" strokeWidth={2} />
-                        ) : (
-                          <Sun className="w-3.5 h-3.5 text-amber-500" strokeWidth={2} />
-                        )}
-                      </div>
-                    </button>
-                  </div>
-                </div>
-              </section>
-
-              {/* Skills Dashboard */}
-              <section className="space-y-3">
-                <h2 className="text-[11px] font-['SF_Pro_Text',system-ui,sans-serif] font-bold tracking-[0.2em] uppercase text-white/40 mb-3 px-1">Skills & Capabilities</h2>
-                <div className="bg-white/[0.02] backdrop-blur-md border border-white/[0.04] rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-hidden transition-all duration-300 hover:border-white/[0.07] hover:bg-white/[0.03]">
-                  {/* Google Services */}
-                  <div className="p-4 border-b border-white/[0.03]">
-                    <span className="text-[10px] font-bold tracking-[0.15em] uppercase text-zinc-500">Google Services</span>
-                  </div>
-                  {[
-                    { key: 'gmail', label: 'Gmail', desc: 'Read and send emails' },
-                    { key: 'calendar', label: 'Calendar', desc: 'View events and schedules' },
-                    { key: 'tasks', label: 'Tasks', desc: 'Manage to-do lists' },
-                    { key: 'drive', label: 'Drive', desc: 'List and search files' },
-                    { key: 'youtube', label: 'YouTube', desc: 'Search and discover videos' },
-                  ].map((s, i, arr) => (
-                    <div key={s.key} className={`px-5 py-3 flex items-center justify-between ${i !== arr.length - 1 ? 'border-b border-white/[0.03]' : ''}`}>
-                      <div className="flex flex-col gap-0.5 pr-4">
-                        <span className="text-[13px] text-zinc-200 font-bold tracking-wide">{s.label}</span>
-                        <span className="text-[10px] text-zinc-500 font-medium">{s.desc}</span>
-                      </div>
-                      <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full ${googleToken ? 'bg-emerald-500/10 border border-emerald-500/20' : 'bg-zinc-800/50 border border-zinc-700/30'}`}>
-                        <div className={`w-1.5 h-1.5 rounded-full ${googleToken ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]' : 'bg-zinc-600'}`} />
-                        <span className={`text-[10px] font-bold uppercase tracking-wider ${googleToken ? 'text-emerald-400' : 'text-zinc-500'}`}>
-                          {googleToken ? 'On' : 'Off'}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </section>
-
-              {/* Save */}
-              <section className="pt-4">
-                <button
-                  onClick={() => saveSettings()}
-                  disabled={isSaving}
-                  className="w-full p-4 bg-[#d0a78b] hover:brightness-110 active:scale-[0.98] disabled:opacity-50 rounded-2xl text-center transition-all duration-200 cursor-pointer shadow-[0_6px_24px_rgba(208,167,139,0.25)] hover:shadow-[0_8px_30px_rgba(208,167,139,0.4)] flex items-center justify-center gap-2"
-                >
-                  {isSaving ? <Loader2 className="w-5 h-5 animate-spin text-black" /> : <Save className="w-5 h-5 text-black" />}
-                  <span className="text-[15px] font-['SF_Pro_Text',system-ui,sans-serif] font-bold tracking-tight text-black">Save Settings</span>
-                </button>
-              </section>
-
-            </div>
-          </motion.div>
-        )}
       </AnimatePresence>
     </div>
   );
