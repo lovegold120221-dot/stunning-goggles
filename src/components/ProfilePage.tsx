@@ -38,6 +38,8 @@ interface ProfilePageProps {
   setSelectedVoice: (v: string) => void;
   saveSettings: (callbacks?: { onSuccess?: () => void; onError?: (msg: string) => void }) => Promise<void>;
   isSaving: boolean;
+  censorshipEnabled: boolean;
+  setCensorshipEnabled: (v: boolean) => void;
 }
 
 const LS_KEY = 'beatrice_knowledge_domains';
@@ -72,6 +74,8 @@ export function ProfilePage({
   selectedVoice,
   setSelectedVoice,
   saveSettings,
+  censorshipEnabled,
+  setCensorshipEnabled,
   isSaving
 }: ProfilePageProps) {
   const user = auth.currentUser!;
@@ -636,6 +640,35 @@ export function ProfilePage({
             {isSaving ? <Loader2 className="w-5 h-5 animate-spin text-black" /> : <Save className="w-5 h-5 text-black" />}
             <span className="text-[15px] font-['SF_Pro_Text',system-ui,sans-serif] font-bold text-black">Save Settings</span>
           </button>
+        </section>
+
+        {/* Content Filtering */}
+        <section>
+          <h2 className="text-[13px] uppercase tracking-wide text-zinc-500 font-medium px-4 mb-2">Content Filtering</h2>
+          <div className="bg-[#1C1C1E] rounded-[20px] overflow-hidden">
+            <div className="p-4 flex items-center justify-between">
+              <div className="flex flex-col gap-0.5 pr-4">
+                <span className="text-[15px] text-white font-medium">Censorship</span>
+                <span className="text-[13px] text-zinc-400 leading-relaxed">
+                  {censorshipEnabled
+                    ? 'Filter profanity and sensitive content'
+                    : 'Unfiltered — agent will not refuse or moralize'}
+                </span>
+              </div>
+              <button
+                onClick={() => setCensorshipEnabled(!censorshipEnabled)}
+                aria-pressed={censorshipEnabled}
+                aria-label="Toggle censorship"
+                className={`w-12 h-6 rounded-full transition-all duration-300 flex items-center shrink-0 cursor-pointer ${
+                  censorshipEnabled ? 'bg-[#d0a78b]' : 'bg-zinc-700'
+                }`}
+              >
+                <span className={`block w-4 h-4 rounded-full bg-white transition-all duration-300 shadow-md ${
+                  censorshipEnabled ? 'ml-[26px]' : 'ml-[4px]'
+                }`} />
+              </button>
+            </div>
+          </div>
         </section>
 
         {/* Logout Section */}

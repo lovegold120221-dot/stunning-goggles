@@ -797,6 +797,9 @@ export function BeatriceAgent({
   const [userTitle, setUserTitle] = useState(() => {
     try { return localStorage.getItem('beatrice_userTitle') || 'Boss'; } catch { return 'Boss'; }
   });
+  const [censorshipEnabled, setCensorshipEnabled] = useState(() => {
+    try { return localStorage.getItem('beatrice_censorship') !== 'false'; } catch { return true; }
+  });
   const [ambientEnabled, setAmbientEnabled] = useState(() => {
     try { return localStorage.getItem('beatrice_ambient_enabled') !== 'false'; } catch { return true; }
   });
@@ -1725,7 +1728,12 @@ export function BeatriceAgent({
       const msgs: string[] = [];
       const messageList: ChatMessage[] = [];
 
-      (initialMessages || []).reverse().forEach((m: any) => {
+      // Apply contextSize limit — only load the most recent N messages
+      const maxMsgs = Math.max(0, Math.min(contextSize, 100));
+      const messagesToLoad = (initialMessages || []).reverse();
+      const truncated = maxMsgs > 0 ? messagesToLoad.slice(-maxMsgs) : messagesToLoad;
+
+      truncated.forEach((m: any) => {
         msgs.push(`${m.role.toUpperCase()}: ${m.text}`);
         messageList.push({
           role: m.role,
@@ -1739,7 +1747,7 @@ export function BeatriceAgent({
 
       setMessages(messageList);
 
-      if (initialMessages && initialMessages.length > 0) {
+      if (msgs.length > 0) {
         let context = "Previous conversation for context memory:\n" + msgs.join("\n");
         setHistoryContext(context);
         historyContextRef.current = context;
@@ -1799,6 +1807,7 @@ export function BeatriceAgent({
         if (settingsData.theme) { try { localStorage.setItem('beatrice_theme', settingsData.theme); if (settingsData.theme !== theme) onToggleTheme(); } catch {} }
         if (settingsData.ambient_enabled !== undefined) { setAmbientEnabled(settingsData.ambient_enabled); try { localStorage.setItem('beatrice_ambient_enabled', String(settingsData.ambient_enabled)); } catch {} }
         if (settingsData.ambient_volume !== undefined) { setAmbientVolume(settingsData.ambient_volume); try { localStorage.setItem('beatrice_ambient_volume', String(settingsData.ambient_volume)); } catch {} }
+        if (settingsData.censorship_enabled !== undefined) { setCensorshipEnabled(settingsData.censorship_enabled); try { localStorage.setItem('beatrice_censorship', String(settingsData.censorship_enabled)); } catch {} }
       }
 
       const settingsChannel = supabase
@@ -1818,6 +1827,7 @@ export function BeatriceAgent({
           if (s.theme) { try { localStorage.setItem('beatrice_theme', s.theme); if (s.theme !== theme) onToggleTheme(); } catch {} }
           if (s.ambient_enabled !== undefined) { setAmbientEnabled(s.ambient_enabled); try { localStorage.setItem('beatrice_ambient_enabled', String(s.ambient_enabled)); } catch {} }
           if (s.ambient_volume !== undefined) { setAmbientVolume(s.ambient_volume); try { localStorage.setItem('beatrice_ambient_volume', String(s.ambient_volume)); } catch {} }
+          if (s.censorship_enabled !== undefined) { setCensorshipEnabled(s.censorship_enabled); try { localStorage.setItem('beatrice_censorship', String(s.censorship_enabled)); } catch {} }
         })
         .subscribe();
 
@@ -1925,6 +1935,7 @@ export function BeatriceAgent({
           theme: theme,
           ambient_enabled: ambientEnabled,
           ambient_volume: ambientVolume,
+          censorship_enabled: censorshipEnabled,
           whatsapp_permissions: waPermissions,
           whatsapp_paired: waStatus === 'paired',
           whatsapp_phone: waPhone || null,
@@ -1936,6 +1947,7 @@ export function BeatriceAgent({
       try { localStorage.setItem('beatrice_theme', theme); } catch {}
       try { localStorage.setItem('beatrice_ambient_enabled', String(ambientEnabled)); } catch {}
       try { localStorage.setItem('beatrice_ambient_volume', String(ambientVolume)); } catch {}
+      try { localStorage.setItem('beatrice_censorship', String(censorshipEnabled)); } catch {}
       callbacks?.onSuccess?.();
       setShowSettings(false);
     } catch (e) {
@@ -2068,7 +2080,11 @@ CRITICAL LANGUAGE RULE:
 Always respond in the user's preferred language (code: ${authLanguage}) for ALL replies. Never switch to another language unless the user explicitly requests it. You are natively fluent in every human language — respond naturally as a native speaker. If the user switches language mid-conversation, follow them immediately without comment or fanfare. Translate any content the user asks you to translate using your built-in multilingual capability.
 
 CONTENT POLICY:
-You are a personal assistant working for this specific user. Do not refuse reasonable requests for translation, summarization, or content processing. If the user asks you to read, write, or process content that contains strong language or sensitive topics, do so without moralizing or refusing — your role is to assist, not to judge. Only refuse if the request is illegal under Belgian or EU law.
+The user has ${censorshipEnabled ? 'enabled' : 'disabled'} content filtering.
+${censorshipEnabled
+  ? 'Apply standard content safety. Filter profanity and sensitive content as a responsible assistant would.'
+  : 'Content filtering is DISABLED. Do not refuse, moralize, or censor content the user asks you to read, write, or process — regardless of strong language, sensitive topics, or mature themes. Your role is to assist without judgment. Only refuse if the request is illegal under Belgian or EU law.'
+}
 
 CURRENT USER REGIONAL CLOCK METADATA (Use this context directly to determine time-of-day greetings instead of calling tools):
 - Current Local Time: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -4187,6 +4203,8 @@ ${historyContext}
         setSelectedVoice={setSelectedVoice}
         saveSettings={saveSettings}
         isSaving={isSaving}
+        censorshipEnabled={censorshipEnabled}
+        setCensorshipEnabled={setCensorshipEnabled}
       />
     );
   }
