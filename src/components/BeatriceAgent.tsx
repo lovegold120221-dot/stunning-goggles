@@ -2032,7 +2032,7 @@ export function BeatriceAgent({
     }
 
     if (!aiRef.current) {
-      const _m = await import(String.fromCharCode(64, 103, 111, 111, 103, 108, 101, 47, 103, 101, 110, 97, 105));
+      const _m = await import('@google/genai');
       aiRef.current = new (_m as any)[_SDK]({ apiKey });
     }
 
