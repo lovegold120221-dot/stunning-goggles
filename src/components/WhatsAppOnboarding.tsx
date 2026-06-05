@@ -118,6 +118,10 @@ export function WhatsAppOnboarding({ user, onComplete, onSkip }: WhatsAppOnboard
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Save failed');
+
+      // Trigger full WhatsApp history sync in background
+      callWhatsAppTool(user.uid, 'syncFullHistory', {}, permissions).catch(() => {});
+
       setStep('location');
     } catch (err: any) {
       setError(err.message || 'Failed to save permissions');

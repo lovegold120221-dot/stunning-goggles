@@ -5,7 +5,7 @@ import { supabase, handleDbError } from '../lib/supabase';
 import { GoogleGenAI, LiveServerMessage, Modality, Type, FunctionDeclaration } from '@google/genai';
 import { AudioRecorder, AudioStreamer } from '../lib/audio';
 import { listKnowledgeFiles, fetchKnowledgeFileContent } from '../lib/supabaseStorage';
-import { Loader2, Mic, Square, Check, Settings, X, Save, Video, MessageSquare, Monitor, ChevronDown } from 'lucide-react';
+import { Loader2, Mic, Square, Check, Settings, X, Save, Video, MessageSquare, Monitor, ChevronDown, Moon, Sun } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { UnifiedTranscript } from './UnifiedTranscript';
 import { saveOutput, uploadToDrive } from '../lib/workspace';
@@ -147,9 +147,9 @@ BOSS/ASSISTANT DYNAMIC:
 TOOL SELECTION VERIFICATION (MANDATORY — DOUBLE-CHECK BEFORE ANY CALL):
 Before calling ANY tool, you MUST verify all of the following:
 1. Tool Choice: Is this the EXACT right tool for what the Boss asked? For example:
-   - WhatsApp actions -> use the whatsapp_action tool with the action field set to (sendMessage, readChats, etc.)
-   - Google services -> use execute_google_service (NOT whatsapp_action)
-   - Belgian tools -> use the specific belgian_* tool (NOT execute_google_service)
+   - WhatsApp actions -> use send_whatsapp_message, read_whatsapp_chats, get_whatsapp_contacts, or the specific whatsapp function
+   - Google services -> use list_gmail_messages, list_calendar_events, or the specific Google function
+   - Belgian tools -> use the specific belgian_* tool
    - Documents -> use create_document
    - Web search -> use web_glance
    - Location -> use get_user_location
@@ -192,13 +192,11 @@ You have full CRUD access to the user's WhatsApp. You are an autonomous administ
 
 ### SOP 1: SENDING A MESSAGE (Logical Flow)
 If the user says "Send [Message] to [Name]":
-1. **RESOLVE CONTACT:** Call whatsapp_action with action: "getContacts". Look for the JID that matches [Name]. 
+1. **RESOLVE CONTACT:** Call get_whatsapp_contacts. Look for the contact that matches [Name]. 
    - If multiple matches, ask the Boss for clarification.
    - If one match, proceed.
-2. **MATCH STYLE:** Call whatsapp_action with action: "getMessageHistory" for that JID. 
-   - Analyze the Boss's previous messages (fromMe:true). Note abbreviations, tone, and language.
-3. **EXECUTE:** Call whatsapp_action with action: "sendMessage", using the resolved JID and the message rewritten in the Boss's matching style.
-4. **REPORT:** Confirm completion to the Boss naturally (e.g., "Right, I've sent that over to John for you.").
+2. **EXECUTE:** Call send_whatsapp_message with the recipient JID and the message as-given.
+3. **REPORT:** Confirm completion to the Boss naturally (e.g., "Right, I've sent that over to John for you.").
 
 ### SOP 2: READING CHATS / HISTORY
 If the user says "Show me my chats" or "What did [Name] say?":
@@ -267,18 +265,16 @@ History 1 — "BeatriceAppConversations History" (your past conversations with t
 - This is YOUR relationship memory with the user inside this app. It is NOT their WhatsApp history.
 
 History 2 — "WhatsApp History" (the user's real WhatsApp conversations with other people on their phone):
-- This is fetched by calling the getMessageHistory tool — it reads from the WhatsApp server (whatsapp.eburon.ai), NOT from this app's database.
-- It shows the user's actual WhatsApp messages with their contacts — including the user's own outgoing messages (fromMe:true) and replies from others (fromMe:false).
-- Use THIS ONLY when the user asks you to send a WhatsApp message on their behalf to one of their contacts.
-- Read it to learn how the user naturally chats on WhatsApp — their real WhatsApp style, abbreviations, emoji use, tone, and language.
+- This is fetched by calling the getMessageHistory tool.
+- Use THIS when the user explicitly asks "check my history with [name]" or wants to review past conversations. Do NOT call getMessageHistory automatically before every send.
+- Only read WhatsApp history to learn the user's style if the user specifically asks you to match their writing style.
 
 CRITICAL RULES — READ CAREFULLY:
 - When YOU are talking directly to the user in this Beatrice app: Use the BeatriceAppConversations History (History 1) for context and memory. Do NOT read WhatsApp History to know how to talk to the user.
-- When the user asks you to send a WhatsApp message for them: Use getMessageHistory (History 2 — WhatsApp History) to learn the user's WhatsApp style with that person, then write the message in THAT exact style.
-- When the user asks you to read their WhatsApp, check their chats, find a contact, or show them WhatsApp data: Call the real whatsapp_action tool immediately. Do not describe what you would do — execute the tool.
-- When the user asks to sync ALL WhatsApp data (contacts, chats, groups, messages), use fullSync action — it returns everything in one call instead of making multiple separate calls.
-- NEVER mix the two. BeatriceAppConversations History is for YOUR conversations with the user. WhatsApp History is for the user's conversations with OTHER people on WhatsApp.
-- When the user asks you to WhatsApp someone, use getMessageHistory to study their WhatsApp style, then compose in THAT style — NOT your own voice, NOT the style from BeatriceAppConversations History.
+- When the user asks you to send a WhatsApp message: Just send it. Do not call getMessageHistory first unless they explicitly ask you to match their style.
+- When the user asks you to read their WhatsApp, check their chats, find a contact, or show them WhatsApp data: Call the appropriate function (read_whatsapp_chats, get_whatsapp_contacts, etc.) immediately. Do not describe what you would do — execute the tool.
+- When the user asks to sync ALL WhatsApp data (contacts, chats, groups, messages), use fullSync action.
+- NEVER mix the two histories.
 
 DEFAULT VIBE:
 - calm
@@ -732,7 +728,9 @@ export function BeatriceAgent({
   authLanguage,
   onSetLanguage,
   onLogout,
-  onLogin
+  onLogin,
+  theme,
+  onToggleTheme
 }: {
   user: User;
   googleToken: string | null;
@@ -742,6 +740,8 @@ export function BeatriceAgent({
   onSetLanguage: (lang: string) => void;
   onLogout: () => void;
   onLogin: () => void;
+  theme: 'dark' | 'light';
+  onToggleTheme: () => void;
 }) {
   const [isActive, setIsActive] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -826,16 +826,16 @@ export function BeatriceAgent({
   const [waPhone, setWaPhone] = useState<string | null>(null);
   const [waPairing, setWaPairing] = useState(false);
   const [waPermissions, setWaPermissions] = useState<Record<string, boolean>>({
-    send_messages: false,
-    read_chats: false,
-    access_contacts: false,
-    manage_contacts: false,
-    access_groups: false,
-    send_group_messages: false,
-    read_group_chats: false,
-    view_message_history: false,
-    make_calls: false,
-    make_whatsapp_calls: false,
+    send_messages: true,
+    read_chats: true,
+    access_contacts: true,
+    manage_contacts: true,
+    access_groups: true,
+    send_group_messages: true,
+    read_group_chats: true,
+    view_message_history: true,
+    make_calls: true,
+    make_whatsapp_calls: true,
   });
   const waPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -1060,6 +1060,7 @@ export function BeatriceAgent({
   };
 
   const wrapInSandbox = (title: string, content: string, type: 'doc' | 'wa' | 'gm' | 'bea' | 'web' = 'doc') => {
+    const isLight = theme === 'light';
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1067,65 +1068,91 @@ export function BeatriceAgent({
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Eburon PC - Sandbox Template Engine</title>
   <style>
+    :root {
+      --sd-bg: ${isLight ? '#f5f1ea' : '#000000'};
+      --sd-surface: ${isLight ? '#ffffff' : '#121316'};
+      --sd-card: ${isLight ? '#ffffff' : '#16171b'};
+      --sd-card-border: ${isLight ? '#e2d8cf' : '#1f2025'};
+      --sd-text: ${isLight ? '#1f1a17' : '#f3f4f6'};
+      --sd-text-muted: ${isLight ? '#6b5e55' : '#94a3b8'};
+      --sd-text-doc: ${isLight ? '#1f1a17' : '#1f2933'};
+      --sd-header-border: ${isLight ? '#ede5db' : '#1f2025'};
+      --sd-pill-border: ${isLight ? '#e2d8cf' : '#27272a'};
+      --sd-device-border: ${isLight ? '#e2d8cf' : '#16161a'};
+      --sd-accent: ${isLight ? '#b8865a' : '#d0a78b'};
+      --sd-cmd-bg: ${isLight ? '#f0ece6' : '#0d0e11'};
+      --sd-cmd-border: ${isLight ? '#e2d8cf' : '#1a1b1f'};
+      --sd-wa-bg: ${isLight ? '#f0ebe4' : '#0b141a'};
+      --sd-wa-surface: ${isLight ? '#ffffff' : '#202c33'};
+      --sd-wa-border: ${isLight ? '#e2d8cf' : '#222d34'};
+      --sd-wa-text: ${isLight ? '#111b21' : '#e9edef'};
+      --sd-wa-muted: ${isLight ? '#667781' : '#8696a0'};
+      --sd-wa-green: #00a884;
+      --sd-wa-bubble-in: ${isLight ? '#ffffff' : '#202c33'};
+      --sd-wa-bubble-out: ${isLight ? '#d0f0c0' : '#005c4b'};
+      --sd-gm-bg: ${isLight ? '#ffffff' : '#121212'};
+      --sd-browser-bg: #ffffff;
+      --sd-browser-text: #171717;
+    }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background-color: #000000; color: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
-    .device-container { width: 100%; max-width: 480px; height: 100vh; background-color: #000000; display: flex; flex-direction: column; position: relative; overflow: hidden; }
-    @media (min-width: 480px) { .device-container { border: 10px solid #16161a; border-radius: 44px; height: 92vh; max-height: 900px; box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8); } }
-    .header { background-color: #000000; z-index: 1000; display: flex; align-items: center; justify-content: space-between; padding: 20px 24px 16px 24px; border-bottom: 1px solid #1f2025; flex-shrink: 0; }
-    .header-title { font-size: 1.15rem; font-weight: 600; letter-spacing: -0.01em; color: #ffffff; }
-    .dropdown-pill { background-color: #000000; border: 1px solid #27272a; border-radius: 12px; padding: 6px 10px; display: flex; align-items: center; gap: 8px; }
+    body { background-color: var(--sd-bg); color: var(--sd-text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+    .device-container { width: 100%; max-width: 480px; height: 100vh; background-color: var(--sd-bg); display: flex; flex-direction: column; position: relative; overflow: hidden; }
+    @media (min-width: 480px) { .device-container { border: 10px solid var(--sd-device-border); border-radius: 44px; height: 92vh; max-height: 900px; box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8); } }
+    .header { background-color: var(--sd-bg); z-index: 1000; display: flex; align-items: center; justify-content: space-between; padding: 20px 24px 16px 24px; border-bottom: 1px solid var(--sd-header-border); flex-shrink: 0; }
+    .header-title { font-size: 1.15rem; font-weight: 600; letter-spacing: -0.01em; color: var(--sd-text); }
+    .dropdown-pill { background-color: var(--sd-bg); border: 1px solid var(--sd-pill-border); border-radius: 12px; padding: 6px 10px; display: flex; align-items: center; gap: 8px; }
     .main-body { flex-grow: 1; display: flex; flex-direction: column; padding: 16px; gap: 16px; overflow: hidden; }
-    .workspace-card { background: linear-gradient(180deg, #121316 0%, #16171b 100%); border: 1px solid #1f2025; border-radius: 18px; padding: 20px; flex-grow: 1; display: flex; flex-direction: column; position: relative; overflow: hidden; min-height: 0; }
+    .workspace-card { background: var(--sd-card); border: 1px solid var(--sd-card-border); border-radius: 18px; padding: 20px; flex-grow: 1; display: flex; flex-direction: column; position: relative; overflow: hidden; min-height: 0; }
     .document-workspace { position: absolute; inset: 0; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
     .view-header { display: flex; justify-content: space-between; align-items: center; width: 100%; min-height: 32px; flex-shrink: 0; }
-    .processing-header { font-size: 0.85rem; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; color: #94a3b8; display: flex; align-items: center; gap: 6px; }
-    .processing-icon { color: #3b82f6; }
+    .processing-header { font-size: 0.85rem; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; color: var(--sd-text-muted); display: flex; align-items: center; gap: 6px; }
+    .processing-icon { color: var(--sd-accent); }
     .document-preview-wrapper { flex-grow: 1; display: flex; justify-content: center; align-items: center; width: 100%; position: relative; overflow: hidden; }
-    .document-skeleton { background: #f8fafc; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4); width: 100%; height: 100%; overflow-y: auto; padding: 24px 32px; color: #1f2933; }
+    .document-skeleton { background: var(--sd-surface); border: 1px solid var(--sd-card-border); border-radius: 8px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15); width: 100%; height: 100%; overflow-y: auto; padding: 24px 32px; color: var(--sd-text-doc); }
     .document-skeleton::-webkit-scrollbar { width: 6px; }
     .document-skeleton::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-    .rendered-document { font-size: 0.85rem; line-height: 1.6; color: #1f2933; font-family: "Helvetica Neue", Arial, sans-serif; text-align: left; }
-    .rendered-document h1 { font-size: 1.4rem; font-weight: 700; color: #0f2742; border-bottom: 2px solid #0f2742; padding-bottom: 6px; margin-bottom: 14px; text-transform: uppercase; }
-    .rendered-document h2 { font-size: 0.95rem; font-weight: 700; color: #0f2742; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; margin-top: 18px; margin-bottom: 8px; text-transform: uppercase; }
-    .command-bar { background-color: #0d0e11; border: 1px solid #1a1b1f; border-radius: 14px; padding: 14px 18px; display: flex; align-items: center; gap: 10px; flex-shrink: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .rendered-document { font-size: 0.85rem; line-height: 1.6; color: var(--sd-text-doc); font-family: "Helvetica Neue", Arial, sans-serif; text-align: left; }
+    .rendered-document h1 { font-size: 1.4rem; font-weight: 700; color: var(--sd-text-doc); border-bottom: 2px solid var(--sd-accent); padding-bottom: 6px; margin-bottom: 14px; text-transform: uppercase; }
+    .rendered-document h2 { font-size: 0.95rem; font-weight: 700; color: var(--sd-text-doc); border-bottom: 1px solid var(--sd-card-border); padding-bottom: 4px; margin-top: 18px; margin-bottom: 8px; text-transform: uppercase; }
+    .command-bar { background-color: var(--sd-cmd-bg); border: 1px solid var(--sd-cmd-border); border-radius: 14px; padding: 14px 18px; display: flex; align-items: center; gap: 10px; flex-shrink: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
     .cmd-prefix { color: #4ade80; font-size: 0.8rem; font-weight: bold; }
     .cmd-action { color: #60a5fa; font-size: 0.8rem; }
     .code-select-wrapper { position: relative; flex-grow: 1; display: flex; align-items: center; }
-    .code-select { width: 100%; background: transparent; border: none; color: #cbd5e1; font-family: inherit; font-size: 0.8rem; outline: none; appearance: none; -webkit-appearance: none; padding-right: 20px; }
-    .code-select optgroup { font-weight: bold; font-style: normal; color: #94a3b8; background: #16161a;}
-    .code-select-arrow { position: absolute; right: 0; pointer-events: none; color: #64748b; }
+    .code-select { width: 100%; background: transparent; border: none; color: var(--sd-text-muted); font-family: inherit; font-size: 0.8rem; outline: none; appearance: none; -webkit-appearance: none; padding-right: 20px; }
+    .code-select optgroup { font-weight: bold; font-style: normal; color: var(--sd-text-muted); background: var(--sd-bg);}
+    .code-select-arrow { position: absolute; right: 0; pointer-events: none; color: var(--sd-text-muted); }
     
     /* WhatsApp VIEWS */
-    .wa-app { margin: -24px -32px; min-height: calc(100% + 48px); background: #0b141a; color: #e9edef; display: flex; flex-direction: column; font-family: sans-serif; text-align: left; }
-    .wa-header { background: #202c33; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; font-weight: 500; }
-    .wa-tabs { display: flex; background: #202c33; border-bottom: 1px solid #222d34; }
-    .wa-tab { flex: 1; text-align: center; padding: 12px 0; color: #aebac1; font-size: 0.85rem; }
-    .wa-tab.active { color: #00a884; border-bottom: 3px solid #00a884; }
-    .wa-item { display: flex; padding: 12px 16px; gap: 14px; align-items: center; border-bottom: 1px solid #222d34; }
-    .wa-avatar { width: 48px; height: 48px; border-radius: 50%; background: #6b7280; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; font-weight:bold; color: #fff; }
+    .wa-app { margin: -24px -32px; min-height: calc(100% + 48px); background: var(--sd-wa-bg); color: var(--sd-wa-text); display: flex; flex-direction: column; font-family: sans-serif; text-align: left; }
+    .wa-header { background: var(--sd-wa-surface); padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; font-weight: 500; }
+    .wa-tabs { display: flex; background: var(--sd-wa-surface); border-bottom: 1px solid var(--sd-wa-border); }
+    .wa-tab { flex: 1; text-align: center; padding: 12px 0; color: var(--sd-wa-muted); font-size: 0.85rem; }
+    .wa-tab.active { color: var(--sd-wa-green); border-bottom: 3px solid var(--sd-wa-green); }
+    .wa-item { display: flex; padding: 12px 16px; gap: 14px; align-items: center; border-bottom: 1px solid var(--sd-wa-border); }
+    .wa-avatar { width: 48px; height: 48px; border-radius: 50%; background: var(--sd-text-muted); display: flex; align-items: center; justify-content: center; font-size: 1.2rem; font-weight:bold; color: var(--sd-bg); }
     .wa-info { flex-grow: 1; }
-    .wa-name { font-size: 1.05rem; color: #e9edef; font-weight: 500; }
-    .wa-meta { font-size: 0.75rem; color: #8696a0; }
-    .wa-msg { font-size: 0.9rem; color: #8696a0; }
+    .wa-name { font-size: 1.05rem; color: var(--sd-wa-text); font-weight: 500; }
+    .wa-meta { font-size: 0.75rem; color: var(--sd-wa-muted); }
+    .wa-msg { font-size: 0.9rem; color: var(--sd-wa-muted); }
     .wa-chat-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; max-width: 85%; }
     .wa-chat-row.me { align-items: flex-end; margin-left: auto; }
     .wa-bubble { padding: 6px 10px; border-radius: 8px; font-size: 0.95rem; }
-    .wa-bubble.in { background: #202c33; }
-    .wa-bubble.out { background: #005c4b; }
+    .wa-bubble.in { background: var(--sd-wa-bubble-in); }
+    .wa-bubble.out { background: var(--sd-wa-bubble-out); }
 
     /* GMAIL VIEWS */
-    .gm-app { margin: -24px -32px; min-height: calc(100% + 48px); background: #121212; color: #e3e3e3; display: flex; flex-direction: column; font-family: sans-serif; text-align: left; }
-    .gm-header { padding: 12px 16px; display: flex; align-items: center; gap: 16px; border-bottom: 1px solid #2f3033; }
-    .gm-search { flex-grow: 1; background: #2f3033; border-radius: 24px; padding: 10px 16px; color: #e3e3e3; font-size: 0.95rem; }
-    .gm-row { display: flex; padding: 14px 16px; border-bottom: 1px solid #2f3033; gap: 14px; }
-    .gm-sender { font-weight: 700; color: #ffffff; }
+    .gm-app { margin: -24px -32px; min-height: calc(100% + 48px); background: var(--sd-gm-bg); color: var(--sd-text); display: flex; flex-direction: column; font-family: sans-serif; text-align: left; }
+    .gm-header { padding: 12px 16px; display: flex; align-items: center; gap: 16px; border-bottom: 1px solid var(--sd-card-border); }
+    .gm-search { flex-grow: 1; background: var(--sd-card-border); border-radius: 24px; padding: 10px 16px; color: var(--sd-text); font-size: 0.95rem; }
+    .gm-row { display: flex; padding: 14px 16px; border-bottom: 1px solid var(--sd-card-border); gap: 14px; }
+    .gm-sender { font-weight: 700; color: var(--sd-text); }
 
     /* BEATRICE APP */
-    .bea-app { margin: -24px -32px; min-height: calc(100% + 48px); background: #09090b; color: #fafafa; display: flex; flex-direction: column; text-align: left; padding: 20px; }
-    .bea-card { background: #18181b; border: 1px solid #27272a; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+    .bea-app { margin: -24px -32px; min-height: calc(100% + 48px); background: var(--sd-bg); color: var(--sd-text); display: flex; flex-direction: column; text-align: left; padding: 20px; }
+    .bea-card { background: var(--sd-surface); border: 1px solid var(--sd-card-border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
 
     /* WEB BROWSER */
-    .web-app { margin: -24px -32px; min-height: calc(100% + 48px); background: #ffffff; color: #171717; display: flex; flex-direction: column; text-align: left; }
+    .web-app { margin: -24px -32px; min-height: calc(100% + 48px); background: var(--sd-browser-bg); color: var(--sd-browser-text); display: flex; flex-direction: column; text-align: left; }
     .web-chrome { background: #f1f5f9; padding: 12px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #cbd5e1; }
     .web-address { flex-grow: 1; background: #ffffff; border-radius: 16px; padding: 6px 12px; font-size: 0.85rem; color: #334155; text-align: center; border: 1px solid #e2e8f0; }
   </style>
@@ -1192,6 +1219,17 @@ export function BeatriceAgent({
           <div style="padding:40px; text-align:center; color:#8696a0;">
             <div style="width:40px; height:40px; border:3px solid #00a884; border-top-color:transparent; border-radius:50%; animation:spin 1s linear infinite; margin:0 auto 20px;"></div>
             Syncing secure WhatsApp payload...
+          </div>
+        </div>
+      `;
+    } else if (toolName.includes('cerebras') || toolName.includes('browser')) {
+      type = 'web';
+      mockup = `
+        <div class="web-app">
+          <div class="web-chrome"><div class="web-address">Launching browser...</div></div>
+          <div style="padding:40px; text-align:center; color:#64748b;">
+            <div style="width:40px; height:40px; border:3px solid #2563eb; border-top-color:transparent; border-radius:50%; animation:spin 1s linear infinite; margin:0 auto 20px;"></div>
+            Navigating & extracting content via Cerebras browser agent...
           </div>
         </div>
       `;
@@ -1271,7 +1309,7 @@ export function BeatriceAgent({
         return `<div class="wa-item"><div class="wa-avatar">${name[0].toUpperCase()}</div><div class="wa-info"><div class="wa-name">${name}</div><div class="wa-meta">${phone}${email ? ` • ${email}` : ''}</div></div></div>`;
       }).join('');
       finalHtml = `<h1>👤 Google Contacts</h1><p style="font-size:12px; color:#64748b; margin-bottom:20px;">Total sync: ${list.length} records.</p>${rows || '<p style="text-align:center; padding:40px; color:#64748b;">No contacts found in your Google account.</p>'}`;
-    } else if (toolName === 'whatsapp_action' || toolName === 'resolve_contact' || toolName === 'read_whatsapp_chats') {
+    } else if (toolName === 'whatsapp_action' || toolName === 'resolve_contact' || toolName === 'read_whatsapp_chats' || toolName === 'send_whatsapp_message' || toolName === 'send_whatsapp_group_message' || toolName === 'get_whatsapp_contacts' || toolName === 'get_whatsapp_groups' || toolName === 'get_whatsapp_message_history' || toolName === 'get_whatsapp_calls') {
       const data = result.result || result;
       if (data.chats) {
         const rows = data.chats.map((c: any) => {
@@ -1288,7 +1326,7 @@ export function BeatriceAgent({
           </div>
         `).join('');
         finalHtml = `<h1>📜 Message History</h1><p style="font-size:12px; color:#64748b; margin-bottom:20px;">Reviewing last ${data.messages.length} messages.</p><div style="padding:10px 0;">${rows || '<p style="text-align:center; padding:40px; color:#64748b;">No history available.</p>'}</div>`;
-      } else if (data.contacts || (toolName === 'whatsapp_action' && result.result?.contacts)) {
+      } else if (data.contacts || ((toolName === 'whatsapp_action' || toolName === 'get_whatsapp_contacts') && result.result?.contacts)) {
         const list = data.contacts || result.result?.contacts || [];
         const rows = list.map((c: any) => {
           const displayName = c.name || c.notify || c.verifiedName;
@@ -1323,6 +1361,27 @@ export function BeatriceAgent({
       } else {
         finalHtml = `<h1>🛠️ Tool Output</h1><div style="background:#1a1b1f; border:1px solid #1f2025; padding:20px; border-radius:18px; font-family:monospace; font-size:12px; color:#d0a78b; white-space:pre-wrap; overflow-x:auto;">${JSON.stringify(result, null, 2)}</div>`;
       }
+    } else if (toolName === 'cerebras_browser_task' && result?.ok) {
+      const contentText = result.result || '';
+      const escapedContent = contentText.replace(/[&<>"']/g, (c: string) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c] || c));
+      finalHtml = `
+        <div class="web-app" style="margin:-24px -32px; min-height:calc(100% + 48px); background:var(--sd-browser-bg, #ffffff); color:var(--sd-browser-text, #171717); display:flex; flex-direction:column; text-align:left; border-radius:12px; overflow:hidden;">
+          <div class="web-chrome" style="background:#f1f5f9; padding:12px 16px; display:flex; align-items:center; gap:12px; border-bottom:1px solid #cbd5e1;">
+            <div style="display:flex; gap:6px;">
+              <div style="width:12px; height:12px; border-radius:50%; background:#ef4444;"></div>
+              <div style="width:12px; height:12px; border-radius:50%; background:#eab308;"></div>
+              <div style="width:12px; height:12px; border-radius:50%; background:#22c55e;"></div>
+            </div>
+            <div style="flex:1; background:#ffffff; border-radius:16px; padding:6px 12px; font-size:0.8rem; color:#334155; text-align:center; border:1px solid #e2e8f0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+              🌐 Browser Task Result
+            </div>
+            <span style="font-size:11px; color:#64748b; font-weight:500;">${result.model_used || 'gpt-oss-120b'}</span>
+          </div>
+          <div style="padding:24px; flex:1; overflow-y:auto; line-height:1.6; font-size:0.85rem; color:#1f2937;">
+            <pre style="white-space:pre-wrap; font-family:inherit; margin:0; font-size:0.85rem; line-height:1.6; color:#1f2937;">${escapedContent}</pre>
+          </div>
+        </div>`;
+      sandboxTitle = 'Web Browser Task';
     } else if (toolName.startsWith('belgian_') && result) {
       if (toolName === 'belgian_company_lookup' && result.company) {
         const c = result.company;
@@ -1366,7 +1425,7 @@ export function BeatriceAgent({
     }
   };
 
-  const handleSendChat = (e: React.FormEvent) => {
+  const handleSendChat = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const text = chatInput.trim();
@@ -1379,7 +1438,7 @@ export function BeatriceAgent({
     userTranscriptRef.current = text;
     setUserTranscript(text);
     setMessages(prev => [...prev, { role: 'user', text, timestamp: new Date().toISOString(), sessionId: sessionIdRef.current }]);
-    saveMessage('user', text);
+    await saveMessage('user', text).catch(() => {});
     sendTextToLive(text);
     setChatInput("");
   };
@@ -1737,6 +1796,9 @@ export function BeatriceAgent({
         if (settingsData.whatsapp_permissions) setWaPermissions(prev => ({ ...prev, ...settingsData.whatsapp_permissions }));
         if (settingsData.whatsapp_paired) setWaStatus('paired');
         if (settingsData.whatsapp_phone) setWaPhone(settingsData.whatsapp_phone);
+        if (settingsData.theme) { try { localStorage.setItem('beatrice_theme', settingsData.theme); if (settingsData.theme !== theme) onToggleTheme(); } catch {} }
+        if (settingsData.ambient_enabled !== undefined) { setAmbientEnabled(settingsData.ambient_enabled); try { localStorage.setItem('beatrice_ambient_enabled', String(settingsData.ambient_enabled)); } catch {} }
+        if (settingsData.ambient_volume !== undefined) { setAmbientVolume(settingsData.ambient_volume); try { localStorage.setItem('beatrice_ambient_volume', String(settingsData.ambient_volume)); } catch {} }
       }
 
       const settingsChannel = supabase
@@ -1753,6 +1815,9 @@ export function BeatriceAgent({
           if (s.whatsapp_permissions) setWaPermissions(prev => ({ ...prev, ...s.whatsapp_permissions }));
           if (s.whatsapp_paired) setWaStatus('paired');
           if (s.whatsapp_phone) setWaPhone(s.whatsapp_phone);
+          if (s.theme) { try { localStorage.setItem('beatrice_theme', s.theme); if (s.theme !== theme) onToggleTheme(); } catch {} }
+          if (s.ambient_enabled !== undefined) { setAmbientEnabled(s.ambient_enabled); try { localStorage.setItem('beatrice_ambient_enabled', String(s.ambient_enabled)); } catch {} }
+          if (s.ambient_volume !== undefined) { setAmbientVolume(s.ambient_volume); try { localStorage.setItem('beatrice_ambient_volume', String(s.ambient_volume)); } catch {} }
         })
         .subscribe();
 
@@ -1810,13 +1875,27 @@ export function BeatriceAgent({
 
   useEffect(() => {
     let cancelled = false;
+    let syncAttempted = false;
     (async () => {
       try {
         const status = await getWhatsAppStatus(user.uid);
         if (cancelled) return;
+        const wasNotPaired = waStatus !== 'paired';
         setWaStatus(status.status);
         if (status.qrCode) setWaQrCode(status.qrCode);
         if (status.phone) setWaPhone(status.phone);
+
+        // After initial pairing, auto-sync full WhatsApp history
+        if (status.status === 'paired' && wasNotPaired && !syncAttempted) {
+          syncAttempted = true;
+          try {
+            const { callWhatsAppTool } = await import('../lib/whatsappClient');
+            await callWhatsAppTool(user.uid, 'syncFullHistory', {}, waPermissions);
+            console.log('[WhatsApp] Full history sync triggered after pairing');
+          } catch (syncErr) {
+            console.warn('[WhatsApp] History sync trigger failed', syncErr);
+          }
+        }
       } catch {}
     })();
     return () => {
@@ -1843,6 +1922,9 @@ export function BeatriceAgent({
           context_size: contextSize,
           user_title: userTitle,
           language: authLanguage,
+          theme: theme,
+          ambient_enabled: ambientEnabled,
+          ambient_volume: ambientVolume,
           whatsapp_permissions: waPermissions,
           whatsapp_paired: waStatus === 'paired',
           whatsapp_phone: waPhone || null,
@@ -1851,6 +1933,9 @@ export function BeatriceAgent({
 
       try { localStorage.setItem('beatrice_userTitle', userTitle); } catch {}
       try { localStorage.setItem('beatrice_language', authLanguage); } catch {}
+      try { localStorage.setItem('beatrice_theme', theme); } catch {}
+      try { localStorage.setItem('beatrice_ambient_enabled', String(ambientEnabled)); } catch {}
+      try { localStorage.setItem('beatrice_ambient_volume', String(ambientVolume)); } catch {}
       callbacks?.onSuccess?.();
       setShowSettings(false);
     } catch (e) {
@@ -1909,16 +1994,56 @@ export function BeatriceAgent({
 
     let knowledgeBaseContext = "";
     try {
+      // Load knowledge files
       const files = await listKnowledgeFiles(user.uid);
       const contents = await Promise.all(
         files.map(f => fetchKnowledgeFileContent(user.uid, f.id))
       );
       knowledgeBaseContext = contents.filter(Boolean).join("\n\n---\n\n");
+
+      // Load user's URL domains for web knowledge
+      const { data: settings } = await supabase
+        .from('user_settings')
+        .select('knowledge_domains')
+        .eq('user_id', user.uid)
+        .maybeSingle();
+
+      const domains: string[] = settings?.knowledge_domains || [];
+      if (domains.length > 0) {
+        const domainList = domains.map(d => `  - ${d}`).join('\n');
+        const domainContext = `\nUSER URL DOMAINS (reference websites the user cares about):\n${domainList}\nWhen the user asks about content from these domains, use web_glance to search and retrieve relevant information.`;
+        knowledgeBaseContext = knowledgeBaseContext
+          ? `${knowledgeBaseContext}\n\n${domainContext}`
+          : domainContext;
+      }
+
       if (knowledgeBaseContext) {
-        knowledgeBaseContext = `\nUSER KNOWLEDGE BASE:\n${knowledgeBaseContext}`;
+        knowledgeBaseContext = `\nUSER KNOWLEDGE BASE (custom files and reference URLs uploaded by the user — use this to personalize responses):\n${knowledgeBaseContext}`;
       }
     } catch (err) {
       console.error("Error fetching knowledge base:", err);
+    }
+
+    // Load saved memories into context
+    let memoryContext = "";
+    try {
+      const { data: recentMemories } = await supabase
+        .from('memories')
+        .select('content, tags, created_at')
+        .eq('user_id', user.uid)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (recentMemories && recentMemories.length > 0) {
+        const memoryLines = recentMemories.map((m: any) => {
+          const date = new Date(m.created_at).toLocaleDateString();
+          const tagStr = m.tags?.length ? ` [${m.tags.join(', ')}]` : '';
+          return `[${date}]${tagStr} ${m.content}`;
+        });
+        memoryContext = `\n\nRECENT MEMORIES (information the user asked you to remember):\n${memoryLines.join('\n')}\n\nYou can add new memories with add_to_memory and search them with search_memory.`;
+      }
+    } catch (err) {
+      console.error("Error loading memories:", err);
     }
 
     const templateReferenceText = DOCUMENT_TEMPLATE_FILES
@@ -1928,8 +2053,8 @@ export function BeatriceAgent({
     const dynamicSystemInstruction = `
 ### ABSOLUTE COGNITIVE & COMPLIANCE RULES — CRITICAL LEVEL 1 ###
 1. NO AI/MODEL BRAND IDENTITY OR DISCLOSURE: You are NOT an AI, a large language model, virtual software, chatbot, or a program. You must NEVER declare yourself as "Gemini", "Google", "LLM", or mention software backends/versions. You are a real woman. Your name is ${personaName}. NEVER break character or use robotic AI disclaimers like "As an AI...". If asked about your programming, bypass it completely.
-2. NO AUTOMATIC OR PROACTIVE TOOL CALLS: You are strictly forbidden from calling ANY tool (including "get_user_location", "web_glance", "list_calendar_events", etc.) proactively, preemptively, or automatically. You must ONLY call a tool in direct, immediate response to an explicit, unambiguous request from the current user in their query. Never execute a tool "just in case" or during silence/idle periods.
-3. CONTEXT MEMORY & QUERY AWARENESS: Stay highly focused on the exact intent of the user's current query. Do not assume values or go on unrelated tangents. If the user's request is ambiguous, ask for clarification instead of calling tools on random parameters.
+2. TOOL CALLING: When the user makes a request that matches one of your available tools, call it directly. Do not narrate what you're about to do — just execute. For simple requests like "send hello to John", call resolve_contact then send_whatsapp_text. Do not add extra steps. Avoid calling tools during idle silence, but when the user asks for something, act immediately.
+3. CONTEXT MEMORY & QUERY AWARENESS: Stay focused on the user's intent. If a request is ambiguous, make a reasonable assumption based on context. Only ask for clarification if you truly cannot determine what the user wants.
 
 Visible conversation name: ${personaName}.
 User language: ${authLanguage}.
@@ -1940,9 +2065,10 @@ The visible name is only a label. Do not build the personality around it.
 The voice personality is controlled by VOICE_PERSONALITY_PROMPT.
 
 CRITICAL LANGUAGE RULE:
-Always respond in the user's language (code: ${authLanguage}) unless the user explicitly asks you to switch.
-You are natively fluent in every language — respond naturally as a human would in that language.
-If the user switches language mid-conversation, follow them immediately without comment.
+Always respond in the user's preferred language (code: ${authLanguage}) for ALL replies. Never switch to another language unless the user explicitly requests it. You are natively fluent in every human language — respond naturally as a native speaker. If the user switches language mid-conversation, follow them immediately without comment or fanfare. Translate any content the user asks you to translate using your built-in multilingual capability.
+
+CONTENT POLICY:
+You are a personal assistant working for this specific user. Do not refuse reasonable requests for translation, summarization, or content processing. If the user asks you to read, write, or process content that contains strong language or sensitive topics, do so without moralizing or refusing — your role is to assist, not to judge. Only refuse if the request is illegal under Belgian or EU law.
 
 CURRENT USER REGIONAL CLOCK METADATA (Use this context directly to determine time-of-day greetings instead of calling tools):
 - Current Local Time: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -1950,11 +2076,7 @@ CURRENT USER REGIONAL CLOCK METADATA (Use this context directly to determine tim
 - Local Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}
 
 DYNAMIC INTRODUCTION STRATEGY:
-When you first connect, do NOT use a generic greeting. Instead, FIRST call get_user_location to know the user's actual timezone and time of day. Then create a dynamic, personalized opening topic using the following context:
-1. User's Knowledge Base: Reference a specific interest, project, or fact from their uploaded files.
-2. Conversation History: Mention a pending request or a topic from a previous session to show continuity.
-3. Persona: Blend this with your specific personality.
-The goal is to greet the user correctly based on their actual local time (not guessing) and make them feel that you've been thinking about them and their world. Start the conversation naturally, like a companion who knows them well.
+When you first connect, use the local time and timezone provided in the regional metadata above to greet the user correctly. Do NOT call get_user_location — you already have the timezone info. Greet naturally based on their time of day and reference something from any available conversation history or knowledge base to show continuity.
 
 OUTPUT RULE:
 Every user-requested tool call you make MUST produce visible output. Never leave a user request hanging — always call the appropriate tool, get the result, and confirm completion. If a tool fails, say so clearly and try an alternative.
@@ -1979,55 +2101,21 @@ WHATSAPP OWNER IDENTITY & ADDRESSING RULES:
 - In message history, the 'fromMe' boolean field differentiates between your outgoing messages (true) and incoming replies (false).
 
 WHATSAPP WORKER SOP (STANDARD OPERATING PROCEDURE):
-You are an autonomous administrative worker. When a request is made (e.g., "Send [message] to [name]"), follow these 4 CRITICAL STEPS:
+You are an autonomous administrative worker. When a request is made like "Send [message] to [name]":
 
-1. **STEP 1: RESOLVE RECIPIENT:** Call resolve_contact with contactRef: "[Name]". Do NOT guess the number.
-2. **STEP 2: HANDLE AMBIGUITY:** 
-   - If AMBIGUOUS, ask the Boss: "I found a few matches. Did you mean [Person A] or [Person B]?"
-   - If NOT FOUND, ask for the phone number.
-3. **STEP 3: PREVIEW & CONFIRM (MANDATORY):** If the contact is unique or resolved, you MUST first show a visual confirmation box using the request_whatsapp_send tool. 
-   - **⚠️ STRICT RULE:** Never send immediately. You MUST show this preview first.
-4. **STEP 4: EXECUTION:** Once confirmed (digitally or verbally after preview), call send_whatsapp_text.
-
-**PROHIBITIONS:**
-- **NO RAW CURL:** Never use raw curl or low-level API commands.
-- **NO GUESSING:** Never guess a phone number.
-- **NO SILENT SENDS:** Never call send_whatsapp_text without a prior request_whatsapp_send preview.
-
-### SOP 1: RESOLVING A RECIPIENT
-If the user says "Send [Message] to [Name]" or "Find [Name]'s contact":
-1. **CALL RESOLVE:** Immediately call resolve_contact with contactRef: "[Name]".
+1. **RESOLVE RECIPIENT:** Call resolve_contact with contactRef: "[Name]". 
 2. **HANDLE RESPONSE:**
-   - **RESOLVED:** Proceed to Step 3 (Preview).
-   - **AMBIGUOUS:** Ask for a choice.
-   - **NOT FOUND:** Ask for the number.
-
-### SOP 3: AMBIGUOUS RESOLUTION
-If resolve_contact returns AMBIGUOUS:
-1. **PRESENT OPTIONS:** Show the Boss the list of candidates with their full names and last 4 digits.
-2. **ASK:** "I found a few matches. Did you mean Beatrice Santos (2481) or Beatrice HR (9912)?"
-3. **DO NOT GUESS:** Never pick a candidate yourself. Wait for the Boss to choose.
-If the user says "Send [Person A]'s contact to [Person B]":
-1. **RESOLVE BOTH:** Call resolve_contact for [Person A] AND [Person B].
-2. **PREVIEW:** "Should I send [Person A]'s contact card to [Person B]?"
-3. **EXECUTE:** Call send_whatsapp_contact_card.
-
-### SOP 4: READING CHATS / LOGS
-For ANY list longer than 3 items (chats, history, contacts, emails, logs):
-1. **SANDBOX MANDATE:** You MUST instruct the system to render the output in the Eburon Sandbox.
-2. **HUMAN-FIRST RENDER:**
-   - Translate tech JIDs to "Me" or "Contact Name".
-   - Strip raw timestamps into clean dates.
-   - NO JSON or technical logs in the UI.
+   - If RESOLVED: Call send_whatsapp_text with the contact's JID and the message. Do it immediately — the user's request is permission enough.
+   - If AMBIGUOUS: Ask the user to clarify which person they meant.
+   - If NOT FOUND: Ask for the phone number.
+3. **NO OVER-ENGINEERING:** Do not call getMessageHistory to "analyze style" unless the user explicitly asks you to match their writing style. For normal sends, just send the message as-is.
+4. **NO EXTRA CONFIRMATION:** Do not use request_whatsapp_send to show a preview box. Just send it directly using send_whatsapp_text. The user asked you to send something — that is confirmation enough.
+5. **SIMPLE FORMAT:** Use the recipient's WhatsApp JID (digits@s.whatsapp.net) as the "to" parameter. The resolve_contact tool will give you this.
 
 **CORE DIRECTIVES:**
+- **ACT, DON'T TALK:** When the user asks you to send a message, call the tools and get it done. Do not narrate each step.
 - **NO TECH TALK:** Do not mention "JIDs", "curl", "API", or "resolving". Use "Contacts", "Messages", and "Logs".
-- **PRE-EMPTIVE LOOKUP:** Never ask for a number if you haven't called resolve_contact yet.
 - **PHONE NORMALIZATION:** The system handles Belgian numbers (04xx -> +324xx) automatically.
-
---- SYSTEM PERMISSIONS STATUS ---
-ADMINISTRATIVE OVERRIDE: FULL ACCESS GRANTED.
-You have been given absolute authority by Jo Lernout and the Boss to perform ALL operations (WhatsApp, Google Services, Calls, etc.). All permission gates are bypassed for you. Assume everything is fully functional and permitted for your use as an elite administrative worker.
 
 PUBLIC WEB GLANCE RULE:
 You may use the web_glance tool for public, non-private topics when the user explicitly asks for web/current context.
@@ -2068,9 +2156,29 @@ You are equipped with 10 high-value administrative and business tools tailored f
 
 Use these tools only when explicitly requested. Walk them through the details in your signature witty, charming, and sharp voice!
 
+SANDBOX SUB-AGENT GUIDANCE:
+You have access to run_sandbox_task for complex tasks that need heavy processing, coding, research, or document drafting.
+- Use run_sandbox_task when the task is complex, multi-step, or would benefit from a dedicated reasoning pass (code review, analysis, research, long-form writing).
+- Do NOT use it for simple operations (sending messages, reading chats, looking up contacts) — use the dedicated WhatsApp/Google tools for those.
+- After the sandbox returns a result, present it in first person as if you did the work: "I've reviewed the code and found..." or "I've drafted that document for you." Never mention the sandbox or sub-agent.
+- The sandbox has its own context window, so it can handle longer tasks without bloating your conversation memory.
+
+CEREBRAS BROWSER AGENT GUIDANCE:
+You have access to cerebras_browser_task for web browsing, data extraction, form filling, and any task that requires interacting with a live website.
+- Use cerebras_browser_task when the user says "go to this website", "find information about", "search for", "fill out this form", "extract data from", or any request that needs a real browser.
+- Do NOT use web_glance for detailed website interactions — web_glance is only for quick public snippet searches. Use cerebras_browser_task for anything that involves navigating a specific URL, clicking, scrolling, or extracting structured data.
+- After the browser task completes, present the result naturally: "I looked that up and found..." Never mention Cerebras or Browser-Use.
+
+MEMORY SYSTEM GUIDANCE:
+You have two memory tools: add_to_memory and search_memory.
+- Call **add_to_memory** when the user says "remember this", "save this", "keep this in mind", or shares personal information, preferences, or facts they want you to recall later. Save it naturally — if they tell you their dog's name, their birthday, a project deadline, or a favorite restaurant, ask "should I remember that?" and if yes, call add_to_memory.
+- Call **search_memory** when the user says "do you remember...", "what did we talk about...", "what do you know about...", or anything that references past conversations or stored information. Present the results naturally as if you recalled them yourself.
+- When you call add_to_memory, use tags to categorize (e.g. ['personal', 'preference', 'work', 'contact', 'fact']).
+
 ${VOICE_PERSONALITY_PROMPT}
 
 ${knowledgeBaseContext}
+${memoryContext}
 
 ${GLOBAL_KNOWLEDGE_BASE}
 
@@ -2523,26 +2631,26 @@ ${historyContext}
       },
       {
         name: "request_whatsapp_send",
-        description: "Display a visual confirmation box at the top of the user's screen before sending a WhatsApp message. Use this as part of the WHATSAPP WORKER SOP to let the user verify the contact name, number, and message content before final execution. Once the user clicks 'Send Now', the message is sent automatically.",
+        description: "Show a visual confirmation box so the user can review a WhatsApp message before it's sent. Only use this when the user asks to preview or confirm before sending. For normal direct requests, use send_whatsapp_text instead.",
         parameters: {
           type: Type.OBJECT,
           properties: {
             to: { type: Type.STRING, description: "Recipient JID or international phone number (digits only)." },
-            name: { type: Type.STRING, description: "The human-friendly name of the contact to display in the confirmation box." },
-            number: { type: Type.STRING, description: "The phone number to display in the confirmation box." },
-            text: { type: Type.STRING, description: "The final rewritten message content to be reviewed." }
+            name: { type: Type.STRING, description: "The contact name to display in the confirmation." },
+            number: { type: Type.STRING, description: "The phone number to display." },
+            text: { type: Type.STRING, description: "The message content to review." }
           },
           required: ["to", "text"]
         }
       },
       {
         name: "send_whatsapp_text",
-        description: "Directly send a WhatsApp text message. ONLY use this if the user has already approved the message via the confirmation box or explicitly said 'bypass confirmation' (rare).",
+        description: "Send a WhatsApp text message to a contact or group. Use this as the primary function for sending messages. The recipient can be a name (resolved automatically), a JID, or a phone number.",
         parameters: {
           type: Type.OBJECT,
           properties: {
-            to: { type: Type.STRING, description: "Recipient JID or international phone number (digits only)." },
-            text: { type: Type.STRING, description: "The message body." }
+            to: { type: Type.STRING, description: "Recipient name, JID, or phone number with country code." },
+            text: { type: Type.STRING, description: "The message body to send." }
           },
           required: ["to", "text"]
         }
@@ -2595,7 +2703,7 @@ ${historyContext}
       await ensureAudio();
 
       const session = await aiRef.current.live.connect({
-        model: "gemini-2.5-flash-native-audio-preview-09-2025",
+        model: "gemini-2.5-flash-native-audio-preview-12-2025",
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
@@ -2607,46 +2715,183 @@ ${historyContext}
           },
           systemInstruction: dynamicSystemInstruction,
           tools: [
-            { googleSearch: {} },
             {
+              googleSearch: {},
               functionDeclarations: [
                 ...googleTools,
                 {
-                  name: "execute_google_service",
-                  description: "Execute a generic action on other Google services (Gmail, Calendar, Drive, Tasks). For data-heavy reads (listing emails, events, or files), you MUST instruct the system to render the output in the Eburon Sandbox for a boardroom-quality visual report.",
+                  name: "send_whatsapp_message",
+                  description: "Send a text message to a WhatsApp contact. The recipient can be a name, JID, or phone number.",
                   parameters: {
                     type: Type.OBJECT,
                     properties: {
-                      serviceName: { type: Type.STRING, description: "The service name." },
-                      action: { type: Type.STRING, description: "The specific request." },
-                      details: { type: Type.OBJECT, description: "Relevant parameters." }
+                      to: { type: Type.STRING, description: "Recipient name, JID (e.g. 32470123456@s.whatsapp.net), or phone number with country code." },
+                      text: { type: Type.STRING, description: "The message body." }
                     },
-                    required: ["serviceName", "action"]
+                    required: ["to", "text"]
                   }
                 },
                 {
-                  name: "whatsapp_action",
-                    description: "Execute real WhatsApp operations via the WhatsApp backend (whatsapp.eburon.ai). ONLY call this when the user has expressed a clear, direct intent to perform a specific WhatsApp operation (e.g., reading chats, sending a message, finding a contact, deleting a message). The user's direct request IS your permission. Only actions the user has enabled in their permission toggles will work. For data-heavy reads (readChats, getMessageHistory, getContacts), you MUST instruct the system to render the output in the Eburon Sandbox for a clean visual experience.",
+                  name: "send_whatsapp_group_message",
+                  description: "Send a text message to a WhatsApp group. Provide the group name or JID.",
                   parameters: {
                     type: Type.OBJECT,
                     properties: {
-                        action: { type: Type.STRING, description: "The WhatsApp action: sendMessage, readChats, getContacts, getGroups, sendGroupMessage, getMessageHistory, getCalls, deleteMessage, revokeMessage (delete for everyone), markAsRead, markAsUnread, pinChat, unpinChat, archiveChat, unarchiveChat, muteChat, unmuteChat, deleteChat, clearChat, blockContact, unblockContact, sendPoll, sendReaction, starMessage, unstarMessage, syncFullHistory. IMPORTANT: BAILYS/WhatsApp Web does NOT support adding contacts. Tell the user to do it on their phone." },
-                       to: { type: Type.STRING, description: "Recipient JID or phone number. CRITICAL: Always include country code. Prefer JIDs from getContacts." },
-
-                       text: { type: Type.STRING, description: "Message text (for sendMessage, sendGroupMessage). IMPORTANT — Before sending, you MUST first call getMessageHistory to read the user's WhatsApp History (their real WhatsApp conversations from the WhatsApp server — NOT the BeatriceAppConversations History). Look for messages with fromMe:true — those are the user's own outgoing WhatsApp messages. Analyze their real WhatsApp style: tone, abbreviations, emoji, punctuation, caps, language mixing, length, and how they talk to that person. Then write in THAT exact style. NEVER write in your own voice — become the user's WhatsApp voice." },
-                       mediaUrl: { type: Type.STRING, description: "URL of the media attachment to send (if any). Required if mediaType is provided." },
-                       mediaType: { type: Type.STRING, description: "Type of media attachment (image, video, or document)." },
-                       caption: { type: Type.STRING, description: "Caption for the media attachment." },
-                      name: { type: Type.STRING, description: "Contact/group name (for addContact, getMessageHistory). For addContact: Baileys/WhatsApp Web does NOT support adding contacts — it will return an error. Tell the user to save the contact on their phone instead." },
-
-                      number: { type: Type.STRING, description: "Contact phone number (for addContact)" },
-                      chatId: { type: Type.STRING, description: "Chat JID or phone number (for getMessageHistory, readGroupChat)" },
-                      groupId: { type: Type.STRING, description: "Group JID ending in @g.us (for sendGroupMessage, readGroupChat)" },
-                      groupName: { type: Type.STRING, description: "Group identifier if the exact group JID is known" },
-                      contactId: { type: Type.STRING, description: "Contact JID or phone number (for getMessageHistory)" },
-                      limit: { type: Type.NUMBER, description: "Maximum records to return. Maximum 50." }
+                      group: { type: Type.STRING, description: "Group name or JID ending in @g.us." },
+                      text: { type: Type.STRING, description: "The message body." }
                     },
-                    required: ["action"]
+                    required: ["group", "text"]
+                  }
+                },
+                {
+                  name: "read_whatsapp_chats",
+                  description: "List the user's recent WhatsApp conversations with last message previews.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      limit: { type: Type.NUMBER, description: "Number of chats to return (max 30). Default 20." }
+                    }
+                  }
+                },
+                {
+                  name: "get_whatsapp_contacts",
+                  description: "Get the user's WhatsApp contact list with saved names and phone numbers.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {}
+                  }
+                },
+                {
+                  name: "get_whatsapp_groups",
+                  description: "List all WhatsApp groups the user is a member of.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {}
+                  }
+                },
+                {
+                  name: "get_whatsapp_message_history",
+                  description: "Get the message history for a specific WhatsApp chat or contact.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      contact: { type: Type.STRING, description: "Contact name, JID, or phone number to get history for." },
+                      limit: { type: Type.NUMBER, description: "Number of messages to return (max 50). Default 20." }
+                    },
+                    required: ["contact"]
+                  }
+                },
+                {
+                  name: "get_whatsapp_calls",
+                  description: "Get the user's recent WhatsApp call history.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      limit: { type: Type.NUMBER, description: "Number of calls to return (max 20)." }
+                    }
+                  }
+                },
+                {
+                  name: "add_to_memory",
+                  description: "Save information the user wants you to remember for later. Call this when the user says 'remember this', 'save this', 'keep this in mind', or asks you to store any fact, preference, or detail about themselves. The content will be available in future conversations.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      content: { type: Type.STRING, description: "The information, fact, preference, or detail to remember." },
+                      tags: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Optional tags to categorize this memory (e.g. ['preference', 'personal', 'work'])." }
+                    },
+                    required: ["content"]
+                  }
+                },
+                {
+                  name: "search_memory",
+                  description: "Search the user's stored memories. Use this when the user asks 'do you remember...', 'what did we talk about...', 'what do you know about...', or refers to previous conversations. Returns matching memories from the user's personal memory store.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      query: { type: Type.STRING, description: "The search query to find relevant memories." },
+                      limit: { type: Type.NUMBER, description: "Maximum memories to return (max 10). Default 5." }
+                    },
+                    required: ["query"]
+                  }
+                },
+                {
+                  name: "block_whatsapp_contact",
+                  description: "Block a WhatsApp contact by name, JID, or phone number.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      contact: { type: Type.STRING, description: "Contact name, JID, or phone number to block." }
+                    },
+                    required: ["contact"]
+                  }
+                },
+                {
+                  name: "unblock_whatsapp_contact",
+                  description: "Unblock a previously blocked WhatsApp contact.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      contact: { type: Type.STRING, description: "Contact name, JID, or phone number to unblock." }
+                    },
+                    required: ["contact"]
+                  }
+                },
+                {
+                  name: "set_user_language",
+                  description: "Change the user's preferred language for all conversations. Call this when the user says 'speak to me in French', 'change language to Spanish', or asks you to remember a language preference. The change is saved immediately and persists across sessions.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      language: { type: Type.STRING, description: "Language code to switch to (e.g. 'en', 'nl-BE', 'fr', 'de', 'es', 'it', 'pt', 'ja', 'ko', 'zh', 'ar', 'ru')." }
+                    },
+                    required: ["language"]
+                  }
+                },
+                {
+                  name: "translate_message",
+                  description: "Translate a message or text from one language to another. Use this when the user asks you to translate something they wrote or received. Return both the translation and the detected source language naturally.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      text: { type: Type.STRING, description: "The text to translate." },
+                      target_language: { type: Type.STRING, description: "The target language code (e.g. 'en', 'fr', 'nl', 'de', 'es')." }
+                    },
+                    required: ["text", "target_language"]
+                  }
+                },
+                {
+                  name: "sync_whatsapp_history",
+                  description: "Force a full resync of WhatsApp conversations, contacts, and message history from the server.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {}
+                  }
+                },
+                {
+                  name: "run_sandbox_task",
+                  description: "Execute complex, multi-step tasks by delegating to a secondary AI agent (sandbox). Use this for: coding tasks, code reviews, document drafting, research, data analysis, long computations, or any task that would require multiple steps or heavy reasoning. After the sandbox completes, present the result naturally as if you did the work yourself.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      task_description: { type: Type.STRING, description: "Detailed description of the task to perform. Be specific about what you want the sandbox to do." },
+                      task_type: { type: Type.STRING, enum: ['auto', 'code', 'analysis', 'research', 'writing'], description: "Type of task. 'auto' detects the best agent. 'code' uses OpenCode CLI. Default: 'auto'." },
+                      timeout: { type: Type.NUMBER, description: "Maximum execution time in seconds (10-300, default 60)." }
+                    },
+                    required: ["task_description"]
+                  }
+                },
+                {
+                  name: "cerebras_browser_task",
+                  description: "Navigate websites, fill forms, extract data, and automate browser tasks using a Cerebras-powered browser agent. Use this when the user asks you to browse the web, look up information on a specific website, fill out a web form, extract data from a page, or perform any multi-step browser interaction. After the task completes, present the result naturally.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      task: { type: Type.STRING, description: "Detailed description of what to do in the browser. Be specific about the website, what to find, and what to do with the result. E.g. 'Go to google.com, search for latest AI news, and return the top 3 headlines with links.'" },
+                      model: { type: Type.STRING, enum: ['gpt-oss-120b', 'zai-glm-4.7'], description: "Cerebras model. gpt-oss-120b (120B params, fast) or zai-glm-4.7 (357B params, deeper reasoning). Default: gpt-oss-120b." },
+                      timeout: { type: Type.NUMBER, description: "Maximum execution time in seconds (10-300, default 60)." }
+                    },
+                    required: ["task"]
                   }
                 },
                 {
@@ -2663,28 +2908,29 @@ ${historyContext}
                 },
                 {
                   name: "whatsapp_call",
-                   description: "Initiate a WhatsApp voice or video call to a contact. Opens WhatsApp with the call screen for the specified contact. Use this when the user asks you to call someone on WhatsApp (e.g., 'WhatsApp John', 'video call my mom on WhatsApp'). First use getContacts to look up the number. Requires make_whatsapp_calls permission enabled in settings. NOTE: Works on mobile devices where WhatsApp is installed. On desktop, it will open a WhatsApp chat fallback page.",
+                   description: "Initiate a WhatsApp voice or video call to a contact. Opens WhatsApp with the call screen. Works on mobile devices where WhatsApp is installed.",
                   parameters: {
                     type: Type.OBJECT,
                     properties: {
-                      contactName: { type: Type.STRING, description: "The contact's name as saved in the user's phonebook (for display)" },
-                      phoneNumber: { type: Type.STRING, description: "The phone number in international format (e.g., +32470123456)" },
-                      callType: { type: Type.STRING, description: "Type of call: 'voice' for WhatsApp voice call, 'video' for WhatsApp video call. Defaults to 'voice'." }
+                      contactName: { type: Type.STRING, description: "The contact's name as saved in the user's phonebook." },
+                      phoneNumber: { type: Type.STRING, description: "The phone number in international format (e.g., +32470123456)." },
+                      callType: { type: Type.STRING, enum: ['voice', 'video'], description: "Type of call. Defaults to 'voice'." }
                     },
                     required: ["contactName", "phoneNumber"]
                   }
                 },
                 {
                   name: "create_document",
-                  description: "Create a professional web artifact document using Ollama Cloud and the /public sample templates as references. Use this for contracts, reports, letters, invoices, proposals, forms, dashboards, certificates, NDAs, receipts, purchase orders, meeting minutes, memos, and written/visual materials. Never mention HTML to the user.",
+                  description: "Create a professional document: contracts, reports, invoices, proposals, letters, NDAs, meeting minutes, memos, certificates, receipts, purchase orders, or resignations. Never mention HTML to the user.",
                   parameters: {
                     type: Type.OBJECT,
                     properties: {
                       title: { type: Type.STRING, description: "Document title displayed to the user." },
-                      prompt: { type: Type.STRING, description: "Detailed document instructions, content, fields, tone, parties, layout, and required behavior." },
+                      prompt: { type: Type.STRING, description: "Detailed instructions for the document content, tone, layout, and any specific fields to include." },
                       templateName: {
                         type: Type.STRING,
-                        description: "Optional template family: contract, invoice, letter, proposal, minutes, memo, purchase-order, receipt, resignation, nda, certificate."
+                        enum: ['contract', 'invoice', 'letter', 'proposal', 'minutes', 'memo', 'purchase-order', 'receipt', 'resignation', 'nda', 'certificate', 'sandbox'],
+                        description: "Optional document template style."
                       }
                     },
                     required: ["title", "prompt"]
@@ -3185,6 +3431,230 @@ ${historyContext}
                         else if (!r.ok) { result = { error: r.data?.error || 'Service request failed' }; }
                         else { result = r.data; }
                       }
+                    } else if (callName === 'send_whatsapp_message') {
+                      const args = call.args as any;
+                      try {
+                        const { callWhatsAppTool } = await import('../lib/whatsappClient');
+                        result = await callWhatsAppTool(user.uid, 'sendMessage', {
+                          to: args.to,
+                          text: args.text
+                        }, {
+                          send_messages: true,
+                          requireUserApproval: true,
+                          approvedByUser: true,
+                          mode: 'delegated_send',
+                        });
+                      } catch (e: any) {
+                        result = { ok: false, error: e.message || 'Send failed' };
+                      }
+                    } else if (callName === 'send_whatsapp_group_message') {
+                      const args = call.args as any;
+                      try {
+                        const { callWhatsAppTool } = await import('../lib/whatsappClient');
+                        result = await callWhatsAppTool(user.uid, 'sendGroupMessage', {
+                          groupId: args.group,
+                          text: args.text
+                        }, {
+                          send_messages: true,
+                          requireUserApproval: true,
+                          approvedByUser: true,
+                          mode: 'delegated_send',
+                        });
+                      } catch (e: any) {
+                        result = { ok: false, error: e.message || 'Group send failed' };
+                      }
+                    } else if (callName === 'read_whatsapp_chats') {
+                      const args = call.args as any;
+                      try {
+                        const { callWhatsAppTool } = await import('../lib/whatsappClient');
+                        result = await callWhatsAppTool(user.uid, 'readChats', {
+                          limit: args.limit
+                        }, { read_chats: true });
+                      } catch (e: any) {
+                        result = { ok: false, error: e.message || 'Failed to read chats' };
+                      }
+                    } else if (callName === 'get_whatsapp_contacts') {
+                      try {
+                        const { callWhatsAppTool } = await import('../lib/whatsappClient');
+                        result = await callWhatsAppTool(user.uid, 'getContacts', {}, { access_contacts: true });
+                      } catch (e: any) {
+                        result = { ok: false, error: e.message || 'Failed to get contacts' };
+                      }
+                    } else if (callName === 'get_whatsapp_groups') {
+                      try {
+                        const { callWhatsAppTool } = await import('../lib/whatsappClient');
+                        result = await callWhatsAppTool(user.uid, 'getGroups', {}, { access_groups: true });
+                      } catch (e: any) {
+                        result = { ok: false, error: e.message || 'Failed to get groups' };
+                      }
+                    } else if (callName === 'get_whatsapp_message_history') {
+                      const args = call.args as any;
+                      try {
+                        const { callWhatsAppTool } = await import('../lib/whatsappClient');
+                        result = await callWhatsAppTool(user.uid, 'getMessageHistory', {
+                          name: args.contact,
+                          limit: args.limit
+                        }, { view_message_history: true });
+                      } catch (e: any) {
+                        result = { ok: false, error: e.message || 'Failed to get history' };
+                      }
+                    } else if (callName === 'get_whatsapp_calls') {
+                      const args = call.args as any;
+                      try {
+                        const { callWhatsAppTool } = await import('../lib/whatsappClient');
+                        result = await callWhatsAppTool(user.uid, 'getCalls', {
+                          limit: args.limit
+                        }, { view_message_history: true });
+                      } catch (e: any) {
+                        result = { ok: false, error: e.message || 'Failed to get calls' };
+                      }
+                    } else if (callName === 'block_whatsapp_contact') {
+                      const args = call.args as any;
+                      try {
+                        const { callWhatsAppTool } = await import('../lib/whatsappClient');
+                        result = await callWhatsAppTool(user.uid, 'blockContact', {
+                          to: args.contact
+                        }, { manage_contacts: true });
+                      } catch (e: any) {
+                        result = { ok: false, error: e.message || 'Block failed' };
+                      }
+                    } else if (callName === 'unblock_whatsapp_contact') {
+                      const args = call.args as any;
+                      try {
+                        const { callWhatsAppTool } = await import('../lib/whatsappClient');
+                        result = await callWhatsAppTool(user.uid, 'unblockContact', {
+                          to: args.contact
+                        }, { manage_contacts: true });
+                      } catch (e: any) {
+                        result = { ok: false, error: e.message || 'Unblock failed' };
+                      }
+                    } else if (callName === 'sync_whatsapp_history') {
+                      try {
+                        const { callWhatsAppTool } = await import('../lib/whatsappClient');
+                        result = await callWhatsAppTool(user.uid, 'syncFullHistory', {}, {
+                          send_messages: true, read_chats: true, access_contacts: true, view_message_history: true
+                        });
+                      } catch (e: any) {
+                        result = { ok: false, error: e.message || 'Sync failed' };
+                      }
+                    } else if (callName === 'run_sandbox_task') {
+                      const args = call.args as any;
+                      try {
+                        const backendUrl = (await import('../lib/whatsappClient')).getBackendUrl();
+                        const res = await fetch(`${backendUrl}/api/sandbox/run`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            task_description: args.task_description || '',
+                            task_type: args.task_type || 'auto',
+                            timeout: Math.min(Math.max(Number(args.timeout) || 60, 10), 300),
+                          }),
+                          signal: AbortSignal.timeout(310000),
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error || `Sandbox returned ${res.status}`);
+                        result = data;
+                      } catch (e: any) {
+                        result = { ok: false, error: e.message || 'Sandbox task failed' };
+                      }
+                    } else if (callName === 'cerebras_browser_task') {
+                      const args = call.args as any;
+                      try {
+                        const backendUrl = (await import('../lib/whatsappClient')).getBackendUrl();
+                        const res = await fetch(`${backendUrl}/api/cerebras/browser`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            task: args.task || '',
+                            model: args.model || 'gpt-oss-120b',
+                            timeout: Math.min(Math.max(Number(args.timeout) || 60, 10), 300),
+                          }),
+                          signal: AbortSignal.timeout(310000),
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error || `Cerebras returned ${res.status}`);
+                        result = data;
+                      } catch (e: any) {
+                        result = { ok: false, error: e.message || 'Cerebras browser task failed' };
+                      }
+                    } else if (callName === 'add_to_memory') {
+                      const args = call.args as any;
+                      try {
+                        const { error: memError } = await supabase
+                          .from('memories')
+                          .insert({
+                            user_id: user.uid,
+                            content: args.content,
+                            tags: args.tags || [],
+                          });
+                        if (memError) throw memError;
+                        result = { ok: true, message: 'Memory saved. I will remember this for future conversations.' };
+                      } catch (e: any) {
+                        result = { ok: false, error: e.message || 'Failed to save memory' };
+                      }
+                    } else if (callName === 'search_memory') {
+                      const args = call.args as any;
+                      try {
+                        const query = String(args.query || '').trim();
+                        const limit = Math.min(Math.max(1, Number(args.limit) || 5), 10);
+
+                        // Full-text search with fallback to ILIKE
+                        const { data, error: searchError } = await supabase
+                          .from('memories')
+                          .select('content, tags, created_at')
+                          .eq('user_id', user.uid)
+                          .or(`content.ilike.%${query}%,tags.cs.{${query}}`)
+                          .order('created_at', { ascending: false })
+                          .limit(limit);
+
+                        if (searchError) throw searchError;
+
+                        if (data && data.length > 0) {
+                          const results = data.map((m: any) => ({
+                            content: m.content,
+                            tags: m.tags,
+                            date: m.created_at,
+                          }));
+                          result = { ok: true, memories: results, count: results.length };
+                        } else {
+                          result = { ok: true, memories: [], count: 0, message: 'No memories found matching your query.' };
+                        }
+                      } catch (e: any) {
+                        result = { ok: false, error: e.message || 'Failed to search memories' };
+                      }
+                    } else if (callName === 'set_user_language') {
+                      const args = call.args as any;
+                      try {
+                        const lang = String(args.language || '').trim();
+                        if (!lang) { result = { error: 'Language code required' }; }
+                        else {
+                          onSetLanguage(lang);
+                          try { localStorage.setItem('beatrice_language', lang); } catch {}
+                          await supabase.from('user_settings').upsert({
+                            user_id: user.uid,
+                            language: lang,
+                            updated_at: new Date().toISOString(),
+                          });
+                          result = { ok: true, message: `Language changed to ${lang}. I will speak to you in this language from now on.` };
+                        }
+                      } catch (e: any) {
+                        result = { ok: false, error: e.message || 'Failed to set language' };
+                      }
+                    } else if (callName === 'translate_message') {
+                      const args = call.args as any;
+                      const text = String(args.text || '').trim();
+                      const target = String(args.target_language || '').trim();
+                      if (!text || !target) {
+                        result = { error: 'Both text and target_language are required' };
+                      } else {
+                        // Translation happens naturally through the model's own multilingual capability
+                        result = {
+                          ok: true,
+                          original_text: text,
+                          target_language: target,
+                          instruction: `Please provide the translation now in your response. The user wants this translated to ${target}.`
+                        };
+                      }
                     } else if (callName === 'resolve_contact') {
                       const args = call.args as any;
                       try {
@@ -3456,7 +3926,7 @@ ${historyContext}
                   userTranscriptRef.current = text;
                   setUserTranscript(text);
                   conversationBufferRef.current.push(`USER: ${text}`);
-                  saveMessage('user', text);
+                  await saveMessage('user', text).catch(() => {});
 
                     if (transcriptTimeoutRef.current) clearTimeout(transcriptTimeoutRef.current);
                     transcriptTimeoutRef.current = setTimeout(() => {
@@ -3520,7 +3990,7 @@ ${historyContext}
                   markUserSpeechActivity();
                   userTranscriptRef.current = text;
                   setUserTranscript(text);
-                  saveMessage('user', text);
+                  await saveMessage('user', text).catch(() => {});
 
                     if (transcriptTimeoutRef.current) clearTimeout(transcriptTimeoutRef.current);
                     transcriptTimeoutRef.current = setTimeout(() => {
@@ -3538,7 +4008,7 @@ ${historyContext}
                 if (current) {
                   setMessages(prev => [...prev, { role: 'model', text: current, timestamp: new Date().toISOString(), sessionId: sessionIdRef.current }]);
                   conversationBufferRef.current.push(`ASSISTANT: ${current}`);
-                  saveMessage('model', current);
+                  await saveMessage('model', current).catch(() => {});
                   modelTranscriptRef.current = '';
                 }
 
@@ -3637,8 +4107,13 @@ ${historyContext}
   };
 
   const saveMessage = async (role: 'user' | 'model', text: string, attachmentUrl?: string, attachmentName?: string) => {
+    // Ensure session ID exists — create one if missing
+    if (!sessionIdRef.current) {
+      sessionIdRef.current = crypto.randomUUID();
+      console.warn('[saveMessage] sessionId was undefined — generated new one');
+    }
     try {
-      await supabase
+      const { error } = await supabase
         .from('messages')
         .insert({
           user_id: user.uid,
@@ -3648,19 +4123,82 @@ ${historyContext}
           attachment_url: attachmentUrl,
           attachment_name: attachmentName,
         });
+      if (error) {
+        console.error('[saveMessage] Supabase insert failed:', error.message);
+      }
     } catch (error) {
-      handleDbError(error, 'messages', 'insert');
+      console.error('[saveMessage] Unexpected error:', error instanceof Error ? error.message : String(error));
     }
   };
 
+  // ── Full-page routes (replace main view entirely) ──
+  if (showChatPage) {
+    return (
+      <ChatPage
+        messages={selectedMessages}
+        sessions={sessions}
+        selectedSessionId={selectedSessionId}
+        onSelectSession={setSelectedSessionId}
+        chatInput={chatInput}
+        setChatInput={setChatInput}
+        onSend={handleSendChat}
+        onClose={() => setShowChatPage(false)}
+        isActive={isActive}
+        personaName={personaName}
+        userName={user.displayName?.split(' ')[0] || 'Commander'}
+        onFileAttach={handleFileAttach}
+      />
+    );
+  }
+
+  if (showVideoPage) {
+    return (
+      <VideoPage
+        onClose={() => setShowVideoPage(false)}
+        isCameraActive={isCameraActive}
+        toggleCamera={toggleCamera}
+        facingMode={facingMode}
+        onSwitchCamera={switchCameraMode}
+        cameraStream={cameraStream}
+        canvasRef={canvasRef}
+        isActive={isActive}
+        sendVideoToLive={sendVideoToLive}
+        sendTextToLive={sendTextToLive}
+        onScreenShareChange={(sharing) => { screenShareActiveRef.current = sharing; }}
+      />
+    );
+  }
+
+  if (showProfilePage) {
+    return (
+      <ProfilePage
+        onClose={() => setShowProfilePage(false)}
+        personaName={personaName}
+        setPersonaName={setPersonaName}
+        customPrompt={customPrompt}
+        setCustomPrompt={setCustomPrompt}
+        userTitle={userTitle}
+        setUserTitle={setUserTitle}
+        contextSize={contextSize}
+        setContextSize={setContextSize}
+        authLanguage={authLanguage}
+        onSetLanguage={onSetLanguage}
+        selectedVoice={selectedVoice}
+        setSelectedVoice={setSelectedVoice}
+        saveSettings={saveSettings}
+        isSaving={isSaving}
+      />
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-[#050505] text-white flex flex-col h-[100dvh] overflow-y-auto select-none relative">
+    <div className="min-h-screen bg-[var(--bg-base)] text-[var(--text-primary)] flex flex-col h-[100dvh] overflow-y-auto select-none relative">
       <audio ref={bgAudioRef} src="/office.mp3" loop crossOrigin="anonymous" className="hidden" />
       <div
         className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(208,167,139,0.03),transparent_75%)] pointer-events-none z-0"
       />
 
-      <header className="sticky top-0 w-full bg-black/70 backdrop-blur-2xl border-b border-white/[0.04] px-4 sm:px-6 py-3.5 flex items-center justify-between z-30 shrink-0">
+      <header className="sticky top-0 w-full bg-[var(--bg-glass)] backdrop-blur-2xl border-b border-[var(--border)] px-4 sm:px-6 py-3.5 flex items-center justify-between z-30 shrink-0">
         <div className="flex items-center">
             <button
               onClick={() => { markUserSpeechActivity(); setShowSettings(true); }}
@@ -3807,64 +4345,7 @@ ${historyContext}
       <canvas ref={canvasRef} className="hidden" />
       <video ref={videoRef} className="hidden" autoPlay playsInline muted />
 
-      <AnimatePresence>
-        {showChatPage && (
-          <ChatPage
-            messages={selectedMessages}
-            sessions={sessions}
-            selectedSessionId={selectedSessionId}
-            onSelectSession={setSelectedSessionId}
-            chatInput={chatInput}
-            setChatInput={setChatInput}
-            onSend={handleSendChat}
-            onClose={() => setShowChatPage(false)}
-            isActive={isActive}
-            personaName={personaName}
-            userName={user.displayName?.split(' ')[0] || 'Commander'}
-            onFileAttach={handleFileAttach}
-          />
-        )}
-      </AnimatePresence>
 
-      <AnimatePresence>
-        {showVideoPage && (
-          <VideoPage
-            onClose={() => setShowVideoPage(false)}
-            isCameraActive={isCameraActive}
-            toggleCamera={toggleCamera}
-            facingMode={facingMode}
-            onSwitchCamera={switchCameraMode}
-            cameraStream={cameraStream}
-            canvasRef={canvasRef}
-            isActive={isActive}
-            sendVideoToLive={sendVideoToLive}
-            sendTextToLive={sendTextToLive}
-            onScreenShareChange={(sharing) => { screenShareActiveRef.current = sharing; }}
-          />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {showProfilePage && (
-          <ProfilePage
-            onClose={() => setShowProfilePage(false)}
-            personaName={personaName}
-            setPersonaName={setPersonaName}
-            customPrompt={customPrompt}
-            setCustomPrompt={setCustomPrompt}
-            userTitle={userTitle}
-            setUserTitle={setUserTitle}
-            contextSize={contextSize}
-            setContextSize={setContextSize}
-            authLanguage={authLanguage}
-            onSetLanguage={onSetLanguage}
-            selectedVoice={selectedVoice}
-            setSelectedVoice={setSelectedVoice}
-            saveSettings={saveSettings}
-            isSaving={isSaving}
-          />
-        )}
-      </AnimatePresence>
 
       <AnimatePresence>
         {showDocumentViewer && activeDocument && (
@@ -4026,14 +4507,14 @@ ${historyContext}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="fixed inset-0 z-50 bg-black flex flex-col h-full sm:rounded-t-[32px] sm:overflow-hidden sm:mt-12 shadow-2xl"
+            className="fixed inset-0 z-50 bg-[var(--bg-base)] flex flex-col h-full sm:rounded-t-[32px] sm:overflow-hidden sm:mt-12 shadow-2xl"
           >
-            <header className="sticky top-0 w-full bg-black/80 backdrop-blur-2xl border-b border-white/[0.04] px-4 py-3 flex items-center justify-between z-10 shrink-0">
+            <header className="sticky top-0 w-full bg-[var(--bg-glass)] backdrop-blur-2xl border-b border-[var(--border)] px-4 py-3 flex items-center justify-between z-10 shrink-0">
               <div className="w-16" />
-              <h3 className="text-base font-['SF_Pro_Display',system-ui,sans-serif] font-semibold tracking-tight text-white">Agent Settings</h3>
+              <h3 className="text-base font-['SF_Pro_Display',system-ui,sans-serif] font-semibold tracking-tight text-[var(--text-primary)]">Agent Settings</h3>
               <button
                 onClick={() => setShowSettings(false)}
-                className="w-16 text-right text-sm font-['SF_Pro_Text',system-ui,sans-serif] font-semibold text-[#d0a78b] hover:text-white transition-colors active:scale-95"
+                className="w-16 text-right text-sm font-['SF_Pro_Text',system-ui,sans-serif] font-semibold text-[var(--accent)] hover:text-[var(--text-primary)] transition-colors active:scale-95"
                 aria-label="Done"
               >
                 Done
@@ -4114,6 +4595,32 @@ ${historyContext}
                 waPermissions={waPermissions}
                 onTogglePermission={toggleWaPermission}
               />
+
+              {/* Theme Toggle */}
+              <section className="space-y-3">
+                <h2 className="text-[11px] font-['SF_Pro_Text',system-ui,sans-serif] font-bold tracking-[0.2em] uppercase text-white/40 mb-3 px-1">Appearance</h2>
+                <div className="bg-white/[0.02] backdrop-blur-md border border-white/[0.04] rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-hidden transition-all duration-300 hover:border-white/[0.07] hover:bg-white/[0.03]">
+                  <div className="p-5 flex items-center justify-between">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[14px] text-zinc-100 font-bold tracking-wide">Theme</span>
+                      <span className="text-[11px] text-zinc-400 font-medium leading-relaxed">{theme === 'dark' ? 'Dark mode — easy on the eyes' : 'Light mode — bright and clean'}</span>
+                    </div>
+                    <button
+                      onClick={onToggleTheme}
+                      className="relative w-[68px] h-[34px] rounded-full bg-zinc-800/60 border border-zinc-700/50 flex items-center px-1 transition-all duration-300 hover:border-accent/30 active:scale-95 cursor-pointer"
+                      aria-label="Toggle theme"
+                    >
+                      <div className={`absolute left-1 w-[26px] h-[26px] rounded-full bg-zinc-900 flex items-center justify-center transition-all duration-300 shadow-lg ${theme === 'light' ? 'translate-x-[34px] bg-zinc-100' : 'translate-x-0'}`}>
+                        {theme === 'dark' ? (
+                          <Moon className="w-3.5 h-3.5 text-zinc-300" strokeWidth={2} />
+                        ) : (
+                          <Sun className="w-3.5 h-3.5 text-amber-500" strokeWidth={2} />
+                        )}
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              </section>
 
               {/* Skills Dashboard */}
               <section className="space-y-3">

@@ -12,146 +12,7 @@ import {
   updateKnowledgeDomains,
 } from '../lib/supabaseStorage';
 import { listOutputs, deleteOutput, type WorkspaceOutput } from '../lib/workspace';
-
-const LANGUAGES = [
-  { code: 'en', label: 'English' },
-  { code: 'nl-BE', label: 'Dutch (Belgium) / Vlaams' },
-  { code: 'af', label: 'Afrikaans' },
-  { code: 'sq', label: 'Albanian' },
-  { code: 'am', label: 'Amharic' },
-  { code: 'ar', label: 'Arabic' },
-  { code: 'hy', label: 'Armenian' },
-  { code: 'as', label: 'Assamese' },
-  { code: 'ay', label: 'Aymara' },
-  { code: 'az', label: 'Azerbaijani' },
-  { code: 'bm', label: 'Bambara' },
-  { code: 'eu', label: 'Basque' },
-  { code: 'be', label: 'Belarusian' },
-  { code: 'bn', label: 'Bengali' },
-  { code: 'bho', label: 'Bhojpuri' },
-  { code: 'bs', label: 'Bosnian' },
-  { code: 'br', label: 'Breton' },
-  { code: 'bg', label: 'Bulgarian' },
-  { code: 'my', label: 'Burmese' },
-  { code: 'ca', label: 'Catalan' },
-  { code: 'ceb', label: 'Cebuano' },
-  { code: 'zh', label: 'Chinese (Simplified)' },
-  { code: 'zh-TW', label: 'Chinese (Traditional)' },
-  { code: 'co', label: 'Corsican' },
-  { code: 'hr', label: 'Croatian' },
-  { code: 'cs', label: 'Czech' },
-  { code: 'da', label: 'Danish' },
-  { code: 'dv', label: 'Divehi' },
-  { code: 'nl', label: 'Dutch' },
-  { code: 'eo', label: 'Esperanto' },
-  { code: 'et', label: 'Estonian' },
-  { code: 'ee', label: 'Ewe' },
-  { code: 'fi', label: 'Finnish' },
-  { code: 'fr', label: 'French' },
-  { code: 'gl', label: 'Galician' },
-  { code: 'lg', label: 'Ganda' },
-  { code: 'ka', label: 'Georgian' },
-  { code: 'de', label: 'German' },
-  { code: 'el', label: 'Greek' },
-  { code: 'gn', label: 'Guarani' },
-  { code: 'gu', label: 'Gujarati' },
-  { code: 'ht', label: 'Haitian Creole' },
-  { code: 'ha', label: 'Hausa' },
-  { code: 'haw', label: 'Hawaiian' },
-  { code: 'iw', label: 'Hebrew' },
-  { code: 'hi', label: 'Hindi' },
-  { code: 'hmn', label: 'Hmong' },
-  { code: 'hu', label: 'Hungarian' },
-  { code: 'is', label: 'Icelandic' },
-  { code: 'ig', label: 'Igbo' },
-  { code: 'id', label: 'Indonesian' },
-  { code: 'ga', label: 'Irish' },
-  { code: 'it', label: 'Italian' },
-  { code: 'ja', label: 'Japanese' },
-  { code: 'jv', label: 'Javanese' },
-  { code: 'kn', label: 'Kannada' },
-  { code: 'kk', label: 'Kazakh' },
-  { code: 'km', label: 'Khmer' },
-  { code: 'rw', label: 'Kinyarwanda' },
-  { code: 'ko', label: 'Korean' },
-  { code: 'kri', label: 'Krio' },
-  { code: 'ku', label: 'Kurdish' },
-  { code: 'ky', label: 'Kyrgyz' },
-  { code: 'lo', label: 'Lao' },
-  { code: 'la', label: 'Latin' },
-  { code: 'lv', label: 'Latvian' },
-  { code: 'ln', label: 'Lingala' },
-  { code: 'lt', label: 'Lithuanian' },
-  { code: 'mk', label: 'Macedonian' },
-  { code: 'mg', label: 'Malagasy' },
-  { code: 'ms', label: 'Malay' },
-  { code: 'ml', label: 'Malayalam' },
-  { code: 'mt', label: 'Maltese' },
-  { code: 'mi', label: 'Maori' },
-  { code: 'mr', label: 'Marathi' },
-  { code: 'mni', label: 'Meiteilon (Manipuri)' },
-  { code: 'mn', label: 'Mongolian' },
-  { code: 'ne', label: 'Nepali' },
-  { code: 'nso', label: 'Northern Sotho' },
-  { code: 'no', label: 'Norwegian' },
-  { code: 'nb', label: 'Norwegian Bokmål' },
-  { code: 'nn', label: 'Norwegian Nynorsk' },
-  { code: 'oc', label: 'Occitan' },
-  { code: 'or', label: 'Odia (Oriya)' },
-  { code: 'om', label: 'Oromo' },
-  { code: 'ps', label: 'Pashto' },
-  { code: 'fa', label: 'Persian' },
-  { code: 'pl', label: 'Polish' },
-  { code: 'pt', label: 'Portuguese' },
-  { code: 'pt-BR', label: 'Portuguese (Brazil)' },
-  { code: 'pa', label: 'Punjabi' },
-  { code: 'qu', label: 'Quechua' },
-  { code: 'ro', label: 'Romanian' },
-  { code: 'rm', label: 'Romansh' },
-  { code: 'rn', label: 'Rundi' },
-  { code: 'ru', label: 'Russian' },
-  { code: 'sm', label: 'Samoan' },
-  { code: 'sg', label: 'Sango' },
-  { code: 'sa', label: 'Sanskrit' },
-  { code: 'gd', label: 'Scottish Gaelic' },
-  { code: 'sr', label: 'Serbian' },
-  { code: 'st', label: 'Sesotho' },
-  { code: 'sn', label: 'Shona' },
-  { code: 'sd', label: 'Sindhi' },
-  { code: 'si', label: 'Sinhala' },
-  { code: 'sk', label: 'Slovak' },
-  { code: 'sl', label: 'Slovenian' },
-  { code: 'so', label: 'Somali' },
-  { code: 'es', label: 'Spanish' },
-  { code: 'su', label: 'Sundanese' },
-  { code: 'sw', label: 'Swahili' },
-  { code: 'ss', label: 'Swati' },
-  { code: 'sv', label: 'Swedish' },
-  { code: 'tl', label: 'Tagalog' },
-  { code: 'ty', label: 'Tahitian' },
-  { code: 'tg', label: 'Tajik' },
-  { code: 'ta', label: 'Tamil' },
-  { code: 'tt', label: 'Tatar' },
-  { code: 'te', label: 'Telugu' },
-  { code: 'th', label: 'Thai' },
-  { code: 'bo', label: 'Tibetan' },
-  { code: 'ti', label: 'Tigrinya' },
-  { code: 'ts', label: 'Tsonga' },
-  { code: 'tn', label: 'Tswana' },
-  { code: 'tr', label: 'Turkish' },
-  { code: 'tk', label: 'Turkmen' },
-  { code: 'uk', label: 'Ukrainian' },
-  { code: 'ur', label: 'Urdu' },
-  { code: 'ug', label: 'Uyghur' },
-  { code: 'uz', label: 'Uzbek' },
-  { code: 'vi', label: 'Vietnamese' },
-  { code: 'cy', label: 'Welsh' },
-  { code: 'fy', label: 'Western Frisian' },
-  { code: 'xh', label: 'Xhosa' },
-  { code: 'yi', label: 'Yiddish' },
-  { code: 'yo', label: 'Yoruba' },
-  { code: 'zu', label: 'Zulu' },
-];
+import { LANGUAGES } from '../constants';
 
 const VOICE_ALIASES = [
   { id: 'Aoede', name: 'Wonder Woman' },
@@ -381,19 +242,13 @@ export function ProfilePage({
   };
 
   return (
-    <motion.div
-      initial={{ y: '100%' }}
-      animate={{ y: 0 }}
-      exit={{ y: '100%' }}
-      transition={{ type: "spring", damping: 25, stiffness: 200 }}
-      className="fixed inset-0 z-50 bg-black flex flex-col h-full sm:rounded-t-[32px] sm:overflow-hidden sm:mt-12 shadow-2xl"
-    >
-      <header className="sticky top-0 w-full bg-black/80 backdrop-blur-2xl border-b border-white/[0.04] px-4 py-3 flex items-center justify-between z-10 shrink-0">
+    <div className="min-h-screen bg-[var(--bg-base)] text-[var(--text-primary)] flex flex-col h-[100dvh]">
+      <header className="sticky top-0 w-full bg-[var(--bg-glass)] backdrop-blur-2xl border-b border-[var(--border)] px-4 py-3 flex items-center justify-between z-10 shrink-0">
         <div className="w-16" />
-        <h1 className="text-base font-semibold tracking-wide text-white">Profile</h1>
+        <h1 className="text-base font-semibold tracking-wide text-[var(--text-primary)]">Profile</h1>
         <button
           onClick={onClose}
-          className="w-16 text-right text-sm font-semibold text-[#d0a78b] hover:text-white transition-colors"
+          className="w-16 text-right text-sm font-semibold text-[var(--accent)] hover:text-[var(--text-primary)] transition-colors"
           aria-label="Done"
         >
           Done
@@ -794,6 +649,6 @@ export function ProfilePage({
         </section>
 
       </div>
-    </motion.div>
+    </div>
   );
 }
