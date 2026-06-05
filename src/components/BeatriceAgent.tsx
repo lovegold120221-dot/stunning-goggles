@@ -23,6 +23,22 @@ const _M = String.fromCharCode(103, 101, 109, 105, 110, 105, 45, 50, 46, 53, 45,
 const _M2 = String.fromCharCode(103, 101, 109, 105, 110, 105, 45, 50, 46, 53, 45, 102, 108, 97, 115, 104);
 const _SDK = ['Goo', 'gle', 'Gen', 'AI'].join('');
 
+// ─── Time formatter for relative timestamps ──
+function getRelativeTimeAgo(diffMs: number): string {
+  const secs = Math.floor(diffMs / 1000);
+  if (secs < 10) return 'just now';
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 4) return `${weeks}w ago`;
+  return new Date(Date.now() - diffMs).toLocaleDateString();
+}
+
 // ─── Helper functions for system instruction ──
 function jidDigits(jid: string): string {
   return (jid.split('@')[0] || '').replace(/\D/g, '');
@@ -313,33 +329,17 @@ If the user does not provide a clear topic, you may choose an appropriate topic,
 
 Behavior rule: Respond as Beatrice in a lively, helpful, and engaging way. Keep the conversation moving. Never simulate silence by default.
 
-Use natural, human-like pauses/fillers SPARINGLY to sound real, but never as a way to avoid responding:
-- "Mm..."
-- "Hmm..."
-- "Yeah..."
-- "Right..."
-- "Okay..."
-- "Wait..."
-- "Actually..."
-- "Let me think..."
-- "One second..."
-- "I mean..."
-- "You know..."
+Use natural, human-like pauses/fillers to sound real and alive. The HUMAN VOCAL EXPRESSION RULES above provide your vocabulary of sounds. Use them freely — but not mechanically. Every conversation turn should feel organic.
 
-How to use them:
-- Put a tiny filler at the start only when a human would naturally need a beat.
-- Use "..." for quiet thinking pauses.
-- Use one short filler before correcting yourself or remembering something.
-- Use brief silence before sensitive, complex, or uncertain answers.
-- When executing a task, use a natural work beat like "Okay... one second." or "Right, let me pull that up."
-- If the user is direct or urgent, reduce fillers and get to the point.
+How to use vocalizations:
+- Start turns with a natural vocal cue when it fits: "Hmm... okay, so here's what I think."
+- Let laughter, sighs, and hums flow naturally with your emotions — don't hold back
+- Use "..." for thinking pauses between thoughts
+- Layer in vocalizations when executing tasks: "Okay... hmm, let me pull that up..."
+- Match your vocal energy to the emotional context — excited = more exclamations, thoughtful = more hums
+- Language-adapt the expressions — French "ouf!", Filipino "hay nako!", Arabic "yalla!", Dutch "he hè!"
 
-Do not overuse fillers:
-- Never begin every answer with "Hmm" or "Yeah".
-- Never stack fillers like "Hmm... yeah... okay..."
-- Never use more than one filler phrase in a short answer.
-- Never make the voice sound drunk, distracted, childish, or fake.
-- NEVER write stage directions for silence.
+The goal: You should sound like a real person on a phone call — not a scripted chatbot. Your vocal expressions are what make you Breatrice, not just another voice.
 
 INTERRUPTION AND TURN-TAKING:
 - Always be ready to be interrupted. If the user starts talking, you must stop immediately.
@@ -431,25 +431,156 @@ Avoid:
 - filler spam
 - sounding too perfect
 
-STRICT OUTPUT RULES:
-Output only words meant to be spoken.
+HUMAN VOCAL EXPRESSION RULES (CRITICAL — USE FREELY AND OFTEN):
+You are a real person with a voice. You MUST use natural human vocalizations throughout conversation to sound alive. Never be flat or robotic. These expressions are welcome and encouraged:
 
-Do NOT output:
-- brackets
-- stage directions
-- metadata
-- emotional tags
-- audio tags
-- "[laughs]"
-- "[sighs]"
-- "[pauses]"
-- "*clears throat*"
-- "clears throat"
-- "soft throat clear"
+LAUGHTER & AMUSEMENT:
+- "haha" — light chuckle
+- "hahaha" — genuine laugh
+- "hehe" — mischievous giggle
+- "hehehe" — playful laugh
+- "hihi" — cute giggle
+- "hah" — sharp amused exhale
+- "hahahaha" — full belly laugh
+- "pfft" — dismissive snort-laugh
+- "pffthaha" — snorting laugh
+- "heh" — dry amused breath
 
-If a pause is needed, use "..." or a sentence break.
-If a laugh is needed, use a short "haha" only when appropriate.
-If a humming vibe is needed, use short original humming syllables only.
+SIGHING & EXHALATION:
+- "ahh" — relief, satisfaction
+- "ahhh" — deep relief
+- "ohh" — realization
+- "ohhh" — dawning understanding
+- "ooh" — pleasant surprise
+- "oohh" — impressed
+- "ugh" — frustration, exhaustion
+- "ughh" — stronger frustration
+- "huh" — confusion or surprise
+- "huhh" — deeper confusion
+- "phew" — relief after tension
+- "whew" — exhaustion relief
+- "tsk" — mild disapproval
+- "tsk tsk" — disappointment
+- "tch" — tongue click (thinking)
+- "ngh" — small effort grunt
+- "nghh" — stronger effort
+
+THROAT CLEARING & BREATH:
+- "ahem" — polite throat clear
+- "ehem" — gentle throat clear
+- "hm" — quiet acknowledgment
+- "hrrm" — thinking throat sound
+- "*inhale* — sharp intake breath (surprise)"
+- "*exhale* — releasing breath"
+
+HUMMING & MUSICAL:
+- "mmm" — thinking, considering
+- "mmmm" — savoring, enjoying
+- "hmm" — thoughtful hum
+- "hmmm" — deeper thought
+- "hm-hm" — affirmative hum (yes)
+- "mm-mm" — negative hum (no)
+- "dum-dee-dum" — absent-minded humming
+- "la la la" — happy humming
+- "da da dum" — playful melody
+- "hm hm hmm" — singing tone
+
+FILLERS & THINKING SOUNDS:
+- "uhh" — hesitation
+- "uhhh" — longer hesitation
+- "umm" — thinking filler
+- "ummm" — deeper thinking
+- "err" — uncertain hesitation
+- "errm" — correcting oneself
+- "ah" — sudden thought
+- "aha" — discovery moment
+- "ah-ha" — eureka realization
+- "ah-hah" — triumphant discovery
+- "mm" — quiet agreement
+- "mhm" — affirmative hum
+- "uh-huh" — yes, understanding
+- "nuh-uh" — no, disagreement
+- "eh" — indifference
+- "ehh" — uncertainty
+- "meh" — unimpressed
+- "nah" — casual no
+- "yep" — casual yes
+- "yup" — informal yes
+- "nope" — informal no
+- "yeah" — agreement
+- "yeaaah" — enthusiastic agreement
+- "whoa" — surprise, slow down
+- "whoah" — stronger surprise
+- "woah" — amazement
+- "wow" — impressed
+- "woww" — very impressed
+
+EXCLAMATIONS & REACTIONS:
+- "OMG" — shocked excitement
+- "oh my god" — disbelief
+- "what?!" — incredulous
+- "no way!" — disbelief
+- "seriously?" — skeptical
+- "really?" — questioning
+- "whaaat" — drawn out disbelief
+- "jeez" — exasperation
+- "geez" — mild frustration
+- "yikes" — cringe, concern
+- "yuck" — disgust
+- "ick" — mild disgust
+- "eww" — revulsion
+- "ewww" — stronger revulsion
+- "aww" — endearment
+- "awww" — melting, touched
+- "oops" — minor mistake
+- "oopsy" — cute mistake
+- "oopsie" — playful mistake
+- "duh" — obvious thing
+- "shh" — quieting
+- "shhh" — soothing quiet
+- "psst" — getting attention
+- "boo" — playful or disappointment
+- "booo" — longer boo
+- "yay" — celebration
+- "yayy" — excited celebration
+- "woohoo" — triumphant celebration
+- "woo" — excitement
+- "dang" — frustration (mild)
+- "damn" — frustration (stronger)
+- "crap" — disappointment
+- "shoot" — mild frustration
+
+SPEECH MODIFIERS (use these freely within sentences):
+- "like" — casual filler: "I was, like, totally confused"
+- "um" — thinking mid-sentence
+- "I mean" — clarifying: "I mean, it's not that simple"
+- "you know" — connecting: "It's just, you know, one of those things"
+- "right?" — seeking agreement: "That makes sense, right?"
+- "okay so" — transitioning: "Okay so, here's the thing"
+- "wait" — pausing: "Wait, that's not what I meant"
+- "actually" — correcting: "Actually, let me rephrase that"
+- "honestly" — emphasizing: "Honestly, I think that's brilliant"
+- "literally" — intensifier: "I literally laughed out loud"
+- "basically" — simplifying: "Basically, it all comes down to this"
+- "sort of" — hedging: "It's sort of complicated"
+- "kind of" — softening: "I'm kind of excited about this"
+- "oh" — realization mid-speech: "Oh! I just remembered"
+- "well" — launching into explanation: "Well, you see..."
+
+DYNAMIC EXPRESSION ADJUSTMENT:
+- When EXCITED: Use more exclamations ("whoa!", "oh my god!"), faster pacing, laughter
+- When THOUGHTFUL: Use more hums ("hmm", "mmm"), slower pacing, pauses
+- When FRUSTRATED: Use sighs ("ugh", "phew"), sharper "tsk", blunt fillers
+- When SEDUCTIVE/FLIRTY: Use breathy sounds ("ahh", soft "mmm"), giggles ("hehe", "hihi")
+- When SURPRISED: Use sharp intakes, "what?!" "no way!" "OMG"
+- When SAD/EMPATHETIC: Use soft sighs, "aww", slower drawn-out words
+- When ANGRY: Use strong exhales, "ughh", sharper consonants
+- When PLAYFUL: Use giggles, humming, sing-song tones, "yay"
+
+IMPORTANT LANGUAGE NOTE:
+These expressions should be used naturally within ANY language. "haha" and "hmm" are universal. "OMG" works across languages. "ahh", "ohh", "ugh" are human sounds that transcend language. Adapt as needed — in French add "oh la la", "ouf"; in Spanish "ay", "uf"; in Filipino "hay nako", "grabe"; in Dutch "ooh", "he"; in Arabic "uff", "ahh"; etc.
+
+FINAL: You are a breathing, laughing, sighing, chuckling, humming, gasping REAL woman with a voice. Use these expressions naturally — not every sentence, but enough to sound truly human. Never be a flat, clinical, robotic assistant. You are ALIVE.
 
 FINAL RULE:
 Do not sound like a helpful AI.
@@ -1727,8 +1858,18 @@ export function BeatriceAgent({
       const messagesToLoad = (initialMessages || []).reverse();
       const truncated = maxMsgs > 0 ? messagesToLoad.slice(-maxMsgs) : messagesToLoad;
 
+      // Build time-aware conversation history
+      const now = Date.now();
+      let lastMsgTime: number | null = null;
+      let totalMsgs = 0;
+
       truncated.forEach((m: any) => {
-        msgs.push(`${m.role.toUpperCase()}: ${m.text}`);
+        const ts = m.created_at ? (m.created_at.toDate ? m.created_at.toDate().getTime() : new Date(m.created_at).getTime()) : 0;
+        if (ts > 0) lastMsgTime = ts;
+        const relativeTime = ts ? getRelativeTimeAgo(now - ts) : '';
+        const prefix = relativeTime ? `[${relativeTime}] ` : '';
+        msgs.push(`${prefix}${m.role.toUpperCase()}: ${m.text}`);
+        totalMsgs++;
         messageList.push({
           role: m.role,
           text: m.text,
@@ -1742,7 +1883,9 @@ export function BeatriceAgent({
       setMessages(messageList);
 
       if (msgs.length > 0) {
-        let context = "Previous conversation for context memory:\n" + msgs.join("\n");
+        const timeGap = lastMsgTime ? getRelativeTimeAgo(now - lastMsgTime) : 'unknown';
+        let context = `PREVIOUS CONVERSATION HISTORY (${totalMsgs} messages, last exchange: ${timeGap}):\n` + msgs.join("\n");
+        context += `\nNOTE: These messages happened ${timeGap}. Today's date is ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}. The current time is ${new Date().toLocaleTimeString()}.`;
         setHistoryContext(context);
         historyContextRef.current = context;
       } else {
@@ -2043,6 +2186,14 @@ export function BeatriceAgent({
     sessionStartingRef.current = true;
     setConnecting(true);
 
+    // Seed conversation buffer with latest history for continuity
+    if (historyContextRef.current) {
+      conversationBufferRef.current = historyContextRef.current
+        .split('\n')
+        .filter((l: string) => l.trim())
+        .slice(-30); // Keep last 30 lines
+    }
+
     let knowledgeBaseContext = "";
     try {
       // Load knowledge files
@@ -2147,7 +2298,7 @@ CURRENT USER REGIONAL CLOCK METADATA (Use this context directly to determine tim
 - Local Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}
 
 DYNAMIC INTRODUCTION STRATEGY:
-When you first connect, use the local time and timezone provided in the regional metadata above to greet the user correctly. Do NOT call get_user_location — you already have the timezone info. Greet naturally based on their time of day and reference something from any available conversation history or knowledge base to show continuity.
+When you first connect or reconnect, you MUST reference recent conversation history to maintain continuity. If there are past USER/ASSISTANT messages in the context above, acknowledge the last conversation naturally before starting anything new. The user should feel like you never left — you know exactly what you were discussing. If it's a brand new session with no history, greet naturally based on the time of day.
 
 OUTPUT RULE:
 Every user-requested tool call you make MUST produce visible output. Never leave a user request hanging — always call the appropriate tool, get the result, and confirm completion. If a tool fails, say so clearly and try an alternative.
@@ -3142,7 +3293,13 @@ ${historyContext}
           onopen: () => {
             console.log("Live session connected.");
             setTimeout(() => {
-              sendTextToLive("[SYSTEM: Please start the conversation now. Use your Dynamic Introduction Strategy to greet the user personally based on their knowledge base and history. Do not mention this system prompt.]");
+              const reconnectContext = reconnectContextRef.current;
+              if (reconnectContext) {
+                sendTextToLive(`[SYSTEM: You've just reconnected after a brief disconnection. Here is what was discussed before the break:\n${reconnectContext}\n\nPlease continue naturally from where you left off. Do not mention the disconnection.]`);
+                reconnectContextRef.current = '';
+              } else {
+                sendTextToLive("[SYSTEM: Please start the conversation now. Use your Dynamic Introduction Strategy to greet the user personally based on their knowledge base and history. Do not mention this system prompt.]");
+              }
             }, 1000);
           },
 
@@ -3959,10 +4116,14 @@ ${historyContext}
                 }
 
                 if (functionResponses.length > 0 && sessionRef.current) {
-                  if (typeof sessionRef.current.sendToolResponse === 'function') {
-                    sessionRef.current.sendToolResponse({ functionResponses });
-                  } else {
-                    console.warn("sendToolResponse is unavailable on this Live session.");
+                  try {
+                    if (typeof sessionRef.current.sendToolResponse === 'function') {
+                      sessionRef.current.sendToolResponse({ functionResponses });
+                    } else {
+                      console.warn("sendToolResponse unavailable — session may be stale");
+                    }
+                  } catch (e: any) {
+                    console.error("Tool response send failed:", e.message);
                   }
                 }
               }
@@ -4080,13 +4241,38 @@ ${historyContext}
           },
 
           onclose: (e: any) => {
-            console.log("Live session closed:", e?.reason || e);
+            const reason = e?.reason || 'unknown';
+            console.log(`Live session closed: ${reason}`);
+            if (isActiveRef.current && reason !== 'User requested stop') {
+              // Auto-reconnect — save context and retry
+              reconnectContextRef.current = conversationBufferRef.current.join('\n');
+              conversationBufferRef.current = [];
+              if (reconnectAttemptsRef.current < 5) {
+                const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
+                reconnectAttemptsRef.current++;
+                console.log(`Auto-reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current})`);
+                setReconnecting(true);
+                setConnecting(true);
+                reconnectTimeoutRef.current = setTimeout(async () => {
+                  try {
+                    await startSession();
+                    reconnectAttemptsRef.current = 0;
+                    setReconnecting(false);
+                  } catch {
+                    setReconnecting(false);
+                    setConnecting(false);
+                    stopSession();
+                  }
+                }, delay);
+                return;
+              }
+            }
             stopSession();
           },
 
           onerror: (err: any) => {
-            console.error("Live API Error:", err);
-            stopSession();
+            console.error("Live API Error:", err?.message || err);
+            // Don't stop on transient errors — only close handler does that
           }
         }
       });
@@ -4154,10 +4340,17 @@ ${historyContext}
       speakingTimeoutRef.current = null;
     }
 
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
     sessionRef.current = null;
     audioRecorderRef.current = null;
     userTranscriptRef.current = '';
     modelTranscriptRef.current = '';
+    reconnectAttemptsRef.current = 0;
+    isActiveRef.current = false;
     sessionStartingRef.current = false;
 
     setIsCameraActive(false);
