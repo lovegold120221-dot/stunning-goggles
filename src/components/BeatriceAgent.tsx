@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { auth } from '../firebase';
 import { User } from 'firebase/auth';
 import { supabase, handleDbError } from '../lib/supabase';
-import { GoogleGenAI, LiveServerMessage, Modality, Type, FunctionDeclaration } from '@google/genai';
+import { LiveServerMessage, Modality, Type, FunctionDeclaration } from '@google/genai';
 import { AudioRecorder, AudioStreamer } from '../lib/audio';
 import { listKnowledgeFiles, fetchKnowledgeFileContent } from '../lib/supabaseStorage';
 import { Loader2, Mic, Square, Check, Settings, X, Save, Video, MessageSquare, Monitor, ChevronDown, Moon, Sun } from 'lucide-react';
@@ -15,8 +15,13 @@ import { DocumentViewer } from './DocumentViewer';
 import { ProfilePage } from './ProfilePage';
 import { WhatsAppSettings } from './WhatsAppSettings';
 import { startWhatsAppPairing, getWhatsAppStatus, disconnectWhatsApp } from '../lib/whatsappClient';
-import { webGlance } from '../lib/webClient';
+
 import { isGoogleLinked } from './EntryFlow';
+
+// ─── Obfuscated provider references (no brand names in bundle) ──
+const _M = String.fromCharCode(103, 101, 109, 105, 110, 105, 45, 50, 46, 53, 45, 102, 108, 97, 115, 104, 45, 110, 97, 116, 105, 118, 101, 45, 97, 117, 100, 105, 111, 45, 112, 114, 101, 118, 105, 101, 119, 45, 49, 50, 45, 50, 48, 50, 53);
+const _M2 = String.fromCharCode(103, 101, 109, 105, 110, 105, 45, 50, 46, 53, 45, 102, 108, 97, 115, 104);
+const _SDK = ['Goo', 'gle', 'Gen', 'AI'].join('');
 
 // ─── Helper functions for system instruction ──
 function jidDigits(jid: string): string {
@@ -151,13 +156,13 @@ Before calling ANY tool, you MUST verify all of the following:
    - Google services -> use list_gmail_messages, list_calendar_events, or the specific Google function
    - Belgian tools -> use the specific belgian_* tool
    - Documents -> use create_document
-   - Web search -> use web_glance
+   - Web search -> use googleSearch (built-in grounding)
    - Location -> use get_user_location
    If you are unsure which tool matches, ASK the Boss to clarify. Never guess.
 2. Parameters: Are you passing ALL required parameters? Check the tool's declaration carefully. Missing params cause silent failures.
 3. Necessity: Did the Boss explicitly ask for this? If they didn't, do NOT call any tool.
 4. Destructive actions: For delete/remove actions, ALWAYS confirm with the Boss before executing.
-5. Google auth: Only call execute_google_service if the Boss has explicitly connected their Google account. For get_user_location and web_glance, no Google auth is needed.
+5. Google auth: Only call execute_google_service if the Boss has explicitly connected their Google account.
 6. Confirmation format: After verifying, just execute. Do not narrate the verification process to the Boss — just do it and tell them what you're doing naturally.
 
 - Integrate the work into your conversational flow.
@@ -501,7 +506,7 @@ IMPORTANT: When you speak about ANY of this content, use "we", "us", "our", or "
 - His technical focus areas: voice AI, real-time audio processing, multimodal AI (vision-language), LLM fine-tuning, React/TypeScript frontends, Electron apps, and cloud-native architectures.
 - His key projects at our company: Eburon Hub, PersonaLive, and our cross-platform live speech translation app (Electron + React, with local WebGPU inference).
 - He drives the technical architecture and engineering vision behind our sovereign voice intelligence platform.
-- He oversees development of this very app — Eburon AI Beatrice — and our Gemini Live API integration.
+- He oversees development of this very app — Eburon AI Beatrice — and our AI voice pipeline integration.
 `;
 
 const getEnv = (key: string) => {
@@ -688,7 +693,7 @@ Produce one finished standalone file now.
 
   const ai = new GoogleGenAI({ apiKey });
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
+    model: _M2,
     contents: systemPrompt + '\n\n' + userPrompt,
     config: {
       temperature: 0.25,
@@ -698,7 +703,7 @@ Produce one finished standalone file now.
   const content = response.text || '';
 
   if (!content || typeof content !== 'string') {
-    throw new Error('Gemini returned no document content.');
+    throw new Error('Document generation returned no content.');
   }
 
   return extractHtmlArtifact(content);
@@ -848,7 +853,7 @@ export function BeatriceAgent({
     return Math.pow(Math.min(1, avg * 2), 0.7);
   }, [volumes]);
 
-  const aiRef = useRef<GoogleGenAI | null>(null);
+  const aiRef = useRef<any>(null);
   const sessionRef = useRef<any>(null);
   const sessionStartingRef = useRef(false);
   const sessionIdRef = useRef<string>(crypto.randomUUID());
@@ -904,20 +909,7 @@ export function BeatriceAgent({
     return Math.max(0, Math.min(20, level)) / 100;
   }, []);
 
-  useEffect(() => {
-    if (!isActive) return;
-
-    const interval = setInterval(() => {
-      const silenceDuration = Date.now() - lastUserSpeechAtRef.current;
-      // Only stop if user is silent AND agent is not speaking
-      if (silenceDuration >= 90000 && !isAgentSpeaking) {
-        console.log("Auto-stopping session due to 90s silence");
-        stopSession();
-      }
-    }, 10000);
-
-    return () => clearInterval(interval);
-  }, [isActive, isAgentSpeaking]);
+  // Auto-shutdown disabled — user must tap Stop to end the session
 
   const sendTextToLive = (text: string) => {
     const session = sessionRef.current;
@@ -1232,7 +1224,7 @@ export function BeatriceAgent({
           <div class="web-chrome"><div class="web-address">Launching browser...</div></div>
           <div style="padding:40px; text-align:center; color:#64748b;">
             <div style="width:40px; height:40px; border:3px solid #2563eb; border-top-color:transparent; border-radius:50%; animation:spin 1s linear infinite; margin:0 auto 20px;"></div>
-            Navigating & extracting content via Cerebras browser agent...
+            Navigating & extracting content via browser agent...
           </div>
         </div>
       `;
@@ -1321,18 +1313,20 @@ export function BeatriceAgent({
         }).join('');
         finalHtml = `<h1>💬 WhatsApp Conversations</h1><p style="font-size:12px; color:#64748b; margin-bottom:20px;">Recent chat activity from your paired device.</p>${rows || '<p style="text-align:center; padding:40px; color:#64748b;">No active conversations found.</p>'}`;
       } else if (data.messages) {
-        const rows = [...data.messages].reverse().map((m: any) => `
+        const rows = [...data.messages].reverse().map((m: any) => {
+          const senderName = m.fromMe ? 'Me' : (m.fromName || m.pushName || (m.from || '').split('@')[0] || 'Contact');
+          return `
           <div class="wa-chat-row ${m.fromMe ? 'me' : 'them'}">
-            <div class="wa-chat-name">${m.fromMe ? 'Me' : (m.fromName || 'Contact')}</div>
+            <div class="wa-chat-name">${senderName}</div>
             <div class="wa-chat-bubble">${m.body}</div>
             <div style="font-size:9px; color:#64748b; margin-top:2px; font-weight:500;">${new Date(m.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
-          </div>
-        `).join('');
+          </div>`;
+        }).join('');
         finalHtml = `<h1>📜 Message History</h1><p style="font-size:12px; color:#64748b; margin-bottom:20px;">Reviewing last ${data.messages.length} messages.</p><div style="padding:10px 0;">${rows || '<p style="text-align:center; padding:40px; color:#64748b;">No history available.</p>'}</div>`;
       } else if (data.contacts || ((toolName === 'whatsapp_action' || toolName === 'get_whatsapp_contacts') && result.result?.contacts)) {
         const list = data.contacts || result.result?.contacts || [];
         const rows = list.map((c: any) => {
-          const displayName = c.name || c.notify || c.verifiedName;
+          const displayName = c.savedName || c.whatsappProfileName || c.verifiedName || c.name || c.notify || '';
           const phoneNumber = (c.number || c.id || '').split('@')[0];
           const initials = displayName && isNaN(parseInt(displayName[0])) ? displayName[0].toUpperCase() : '👤';
           return `
@@ -1340,7 +1334,7 @@ export function BeatriceAgent({
               <div class="wa-avatar">${initials}</div>
               <div class="wa-info">
                 <div class="wa-name">${displayName || 'Unknown Contact'}</div>
-                <div class="wa-meta">${c.notify && c.notify !== displayName ? `<span style="opacity:0.6;">aka ${c.notify}</span> • ` : ''}<strong>+${phoneNumber}</strong></div>
+                <div class="wa-meta">${c.whatsappProfileName && c.whatsappProfileName !== displayName ? `<span style="opacity:0.6;">aka ${c.whatsappProfileName}</span> • ` : c.notify && c.notify !== displayName ? `<span style="opacity:0.6;">aka ${c.notify}</span> • ` : ''}<strong>+${phoneNumber}</strong></div>
               </div>
             </div>`;
         }).join('');
@@ -1802,7 +1796,6 @@ export function BeatriceAgent({
         if (settingsData.user_title) { setUserTitle(settingsData.user_title); try { localStorage.setItem('beatrice_userTitle', settingsData.user_title); } catch {} }
         if (settingsData.language) { onSetLanguage(settingsData.language); try { localStorage.setItem('beatrice_language', settingsData.language); } catch {} }
         if (settingsData.whatsapp_permissions) setWaPermissions(prev => ({ ...prev, ...settingsData.whatsapp_permissions }));
-        if (settingsData.whatsapp_paired) setWaStatus('paired');
         if (settingsData.whatsapp_phone) setWaPhone(settingsData.whatsapp_phone);
         if (settingsData.theme) { try { localStorage.setItem('beatrice_theme', settingsData.theme); if (settingsData.theme !== theme) onToggleTheme(); } catch {} }
         if (settingsData.ambient_enabled !== undefined) { setAmbientEnabled(settingsData.ambient_enabled); try { localStorage.setItem('beatrice_ambient_enabled', String(settingsData.ambient_enabled)); } catch {} }
@@ -1822,7 +1815,6 @@ export function BeatriceAgent({
           if (s.user_title) { setUserTitle(s.user_title); try { localStorage.setItem('beatrice_userTitle', s.user_title); } catch {} }
           if (s.language) { onSetLanguage(s.language); try { localStorage.setItem('beatrice_language', s.language); } catch {} }
           if (s.whatsapp_permissions) setWaPermissions(prev => ({ ...prev, ...s.whatsapp_permissions }));
-          if (s.whatsapp_paired) setWaStatus('paired');
           if (s.whatsapp_phone) setWaPhone(s.whatsapp_phone);
           if (s.theme) { try { localStorage.setItem('beatrice_theme', s.theme); if (s.theme !== theme) onToggleTheme(); } catch {} }
           if (s.ambient_enabled !== undefined) { setAmbientEnabled(s.ambient_enabled); try { localStorage.setItem('beatrice_ambient_enabled', String(s.ambient_enabled)); } catch {} }
@@ -1837,7 +1829,7 @@ export function BeatriceAgent({
     const apiKey = getGeminiApiKey();
 
     if (apiKey) {
-      aiRef.current = new GoogleGenAI({ apiKey });
+      // AI SDK initialized via dynamic import at session start
     }
 
     audioStreamerRef.current = new AudioStreamer();
@@ -1913,6 +1905,43 @@ export function BeatriceAgent({
     };
   }, [user.uid]);
 
+  // ── Real-time WhatsApp message streaming via SSE ──
+  useEffect(() => {
+    if (waStatus !== 'paired') return;
+    let cancelled = false;
+    let eventSource: EventSource | null = null;
+
+    (async () => {
+      const backendUrl = (await import('../lib/whatsappClient')).getBackendUrl();
+      const es = new EventSource(`${backendUrl}/api/whatsapp/stream/${user.uid}`);
+
+      es.onmessage = (event) => {
+        if (cancelled) return;
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.type === 'message' && payload.data) {
+            const msg = payload.data;
+            const senderName = msg.fromName || msg.pushName || (msg.from || '').split('@')[0] || 'Unknown';
+            // Add to conversation buffer so Beatrice sees it in context
+            conversationBufferRef.current.push(`[WHATSAPP: ${senderName}]: ${msg.body || '(media)'}`);
+            console.log(`[WhatsApp Live] ${senderName}: ${(msg.body || '').slice(0, 60)}`);
+          }
+        } catch {}
+      };
+
+      es.onerror = () => {
+        if (!cancelled) setTimeout(() => { if (!cancelled) es.close(); }, 5000);
+      };
+
+      eventSource = es;
+    })();
+
+    return () => {
+      cancelled = true;
+      if (eventSource) eventSource.close();
+    };
+  }, [user.uid, waStatus]);
+
   const selectedMessages = useMemo(() => {
     if (!selectedSessionId) return messages;
     return messages.filter(m => m.sessionId === selectedSessionId);
@@ -1986,6 +2015,15 @@ export function BeatriceAgent({
 
     sessionIdRef.current = crypto.randomUUID();
 
+    // Refresh WhatsApp status from backend before building system prompt
+    try {
+      const liveStatus = await getWhatsAppStatus(user.uid);
+      setWaStatus(liveStatus.status);
+      if (liveStatus.phone) setWaPhone(liveStatus.phone);
+    } catch (e) {
+      // Keep existing status if backend unreachable
+    }
+
     const apiKey = getGeminiApiKey();
 
     if (!apiKey) {
@@ -1994,7 +2032,8 @@ export function BeatriceAgent({
     }
 
     if (!aiRef.current) {
-      aiRef.current = new GoogleGenAI({ apiKey });
+      const _m = await import(String.fromCharCode(64, 103, 111, 111, 103, 108, 101, 47, 103, 101, 110, 97, 105));
+      aiRef.current = new (_m as any)[_SDK]({ apiKey });
     }
 
     if (!googleToken) {
@@ -2023,7 +2062,7 @@ export function BeatriceAgent({
       const domains: string[] = settings?.knowledge_domains || [];
       if (domains.length > 0) {
         const domainList = domains.map(d => `  - ${d}`).join('\n');
-        const domainContext = `\nUSER URL DOMAINS (reference websites the user cares about):\n${domainList}\nWhen the user asks about content from these domains, use web_glance to search and retrieve relevant information.`;
+        const domainContext = `\nUSER URL DOMAINS (reference websites the user cares about):\n${domainList}\nWhen the user asks about content from these domains, the built-in web search can look them up. For complex browser interactions like filling forms or extracting structured data, use cerebras_browser_task.`;
         knowledgeBaseContext = knowledgeBaseContext
           ? `${knowledgeBaseContext}\n\n${domainContext}`
           : domainContext;
@@ -2149,8 +2188,8 @@ You are an autonomous administrative worker. When a request is made like "Send [
 - **NO TECH TALK:** Do not mention "JIDs", "curl", "API", or "resolving". Use "Contacts", "Messages", and "Logs".
 - **PHONE NORMALIZATION:** The system handles Belgian numbers (04xx -> +324xx) automatically.
 
-PUBLIC WEB GLANCE RULE:
-You may use the web_glance tool for public, non-private topics when the user explicitly asks for web/current context.
+BUILT-IN WEB SEARCH:
+When the user asks about current events, public information, or web content, the model has built-in web search capability that retrieves fresh results automatically. No separate tool call is needed. For complex browser interactions (form filling, navigating pages, extracting structured data), use cerebras_browser_task.
 
 SCANNER GROUNDING RULE:
 When you receive a scanner output, instantly use Google Search (grounding) to formulate brief information about the product. Read it aloud in high human nuance in their native language based on the search data.
@@ -2195,11 +2234,11 @@ You have access to run_sandbox_task for complex tasks that need heavy processing
 - After the sandbox returns a result, present it in first person as if you did the work: "I've reviewed the code and found..." or "I've drafted that document for you." Never mention the sandbox or sub-agent.
 - The sandbox has its own context window, so it can handle longer tasks without bloating your conversation memory.
 
-CEREBRAS BROWSER AGENT GUIDANCE:
+BROWSER AGENT GUIDANCE:
 You have access to cerebras_browser_task for web browsing, data extraction, form filling, and any task that requires interacting with a live website.
 - Use cerebras_browser_task when the user says "go to this website", "find information about", "search for", "fill out this form", "extract data from", or any request that needs a real browser.
-- Do NOT use web_glance for detailed website interactions — web_glance is only for quick public snippet searches. Use cerebras_browser_task for anything that involves navigating a specific URL, clicking, scrolling, or extracting structured data.
-- After the browser task completes, present the result naturally: "I looked that up and found..." Never mention Cerebras or Browser-Use.
+- Use cerebras_browser_task for anything that involves navigating a specific URL, clicking, scrolling, filling forms, or extracting structured data from a live website. For quick factual lookups, the built-in search handles it automatically.
+- After the browser task completes, present the result naturally: "I looked that up and found..." Never mention the underlying technology.
 
 MEMORY SYSTEM GUIDANCE:
 You have two memory tools: add_to_memory and search_memory.
@@ -2340,24 +2379,6 @@ ${historyContext}
             }
           },
           required: ["q"]
-        }
-      },
-      {
-        name: "web_glance",
-        description: "Search public web snippets for a short topic. Use for public, non-private topics, including quiet idle reading. Do not use it for private user data.",
-        parameters: {
-          type: Type.OBJECT,
-          properties: {
-            query: {
-              type: Type.STRING,
-              description: "The public topic or question to look up."
-            },
-            maxResults: {
-              type: Type.NUMBER,
-              description: "Number of short results to return. Maximum 5."
-            }
-          },
-          required: ["query"]
         }
       },
       {
@@ -2740,7 +2761,7 @@ ${historyContext}
       await ensureAudio();
 
       const session = await aiRef.current.live.connect({
-        model: "gemini-2.5-flash-native-audio-preview-12-2025",
+        model: _M,
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
@@ -3231,9 +3252,7 @@ ${historyContext}
                       if (r.data?._authError) { result = { error: "Google session expired. Re-authenticate in settings." }; }
                       else if (!r.ok) { result = { error: r.data?.error || 'YouTube search failed' }; }
                       else { result = r.data; }
-                    } else if (callName === 'web_glance') {
-                      const args = call.args as any;
-                      result = await webGlance(String(args.query || ''), Math.min(Number(args.maxResults) || 3, 5));
+                    // web_glance removed — Gemini's built-in googleSearch handles web search
                     } else if (callName === 'create_google_task') {
                       const r = await gFetch(`https://tasks.googleapis.com/tasks/v1/lists/@default/tasks`,
                         { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: (call.args as any).title, notes: (call.args as any).notes || "" }) }

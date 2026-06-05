@@ -9,6 +9,7 @@ import fs from 'fs';
 import path from 'path';
 import P from 'pino';
 import QRCode from 'qrcode';
+import { EventEmitter } from 'events';
 import { supabase } from './supabase';
 
 type WaStatus = 'init' | 'qr_ready' | 'paired' | 'disconnected' | 'error';
@@ -32,6 +33,7 @@ export interface WaRecentMessage {
   chatId: string;
   from: string;
   fromName?: string;
+  pushName?: string;
   body: string;
   timestamp: number;
   fromMe: boolean;
@@ -257,9 +259,30 @@ function writeSessionData(entry: WaSession) {
   fs.writeFileSync(entry.dataFile, JSON.stringify(payload, null, 2));
 }
 
-export class WhatsAppManager {
+export class WhatsAppManager extends EventEmitter {
   private sessions = new Map<string, WaSession>();
   private authRoot = process.env.WA_AUTH_ROOT || path.join(process.cwd(), '.baileys_auth');
+  private sseClients = new Map<string, Set<(msg: any) => void>>();
+
+  // ── SSE (Server-Sent Events) for real-time message streaming ──
+  onSseConnect(userId: string, callback: (msg: any) => void) {
+    if (!this.sseClients.has(userId)) this.sseClients.set(userId, new Set());
+    this.sseClients.get(userId)!.add(callback);
+  }
+
+  onSseDisconnect(userId: string, callback: (msg: any) => void) {
+    this.sseClients.get(userId)?.delete(callback);
+    if (this.sseClients.get(userId)?.size === 0) this.sseClients.delete(userId);
+  }
+
+  private emitNewMessage(userId: string, msg: any) {
+    const clients = this.sseClients.get(userId);
+    if (clients) {
+      for (const cb of clients) {
+        try { cb(msg); } catch {}
+      }
+    }
+  }
 
   async resumeExistingSessions(): Promise<void> {
     if (!fs.existsSync(this.authRoot)) return;
@@ -490,6 +513,7 @@ export class WhatsAppManager {
             chatId,
             from: msg.key?.participant || msg.key?.remoteJid || '',
             fromName: msg.key?.fromMe ? 'Me' : undefined,
+            pushName: msg.pushName || undefined,
             body: body.slice(0, 1000),
             timestamp: timestampMs(msg.messageTimestamp),
             fromMe: !!msg.key?.fromMe,
@@ -500,8 +524,25 @@ export class WhatsAppManager {
           };
           entry.recentMessages.unshift(record);
 
-          // Capture public profile name (pushName) from incoming messages to pair it with the JID
-          if (chatId && chatId.endsWith('@s.whatsapp.net') && msg.pushName) {
+          // Emit new message to SSE clients for real-time streaming
+          this.emitNewMessage(userId, record);
+
+          // Capture public profile name (pushName) from incoming messages
+          const senderJid = msg.key?.participant || chatId;
+          if (senderJid && senderJid.endsWith('@s.whatsapp.net') && msg.pushName) {
+            const existing = entry.contacts[senderJid];
+            const savedName = existing?.name && existing.name !== senderJid ? existing.name : '';
+            const notifyName = msg.pushName || existing?.notify || '';
+            entry.contacts[senderJid] = {
+              id: senderJid,
+              name: savedName || notifyName || senderJid,
+              notify: notifyName || undefined,
+              verifiedName: existing?.verifiedName || undefined,
+              number: jidNumber(senderJid),
+            };
+          }
+          // Also capture pushName for the chat itself (1-on-1 chats)
+          if (chatId && chatId.endsWith('@s.whatsapp.net') && msg.pushName && senderJid !== chatId) {
             const existing = entry.contacts[chatId];
             const savedName = existing?.name && existing.name !== chatId ? existing.name : '';
             const notifyName = msg.pushName || existing?.notify || '';
@@ -551,6 +592,7 @@ export class WhatsAppManager {
             chatId,
             from: msg.key?.participant || msg.key?.remoteJid || '',
             fromName: msg.key?.fromMe ? 'Me' : undefined,
+            pushName: msg.pushName || undefined,
             body: body.slice(0, 1000),
             timestamp: timestampMs(msg.messageTimestamp),
             fromMe: !!msg.key?.fromMe,
@@ -1145,25 +1187,9 @@ export class WhatsAppManager {
     if (!entry) return { ok: false, error: 'Session not found' };
     if (!entry.sock) return { ok: false, error: 'Not connected' };
 
-    entry.recentMessages = [];
-    entry.messageById = new Map();
+    // Preserve existing messages — don't clear them. Just reconnect to get new ones.
     this.clearSaveTimer(entry);
     this.clearReconnectTimer(entry);
-
-    // Reset Baileys creds to force a fresh messaging-history.set on reconnect
-    try {
-      const credsPath = path.join(entry.authDir, 'creds.json');
-      if (fs.existsSync(credsPath)) {
-        const creds = JSON.parse(fs.readFileSync(credsPath, 'utf-8'));
-        creds.accountSyncCounter = 0;
-        delete creds.lastAccountSyncTimestamp;
-        delete creds.processedHistoryMessages;
-        fs.writeFileSync(credsPath, JSON.stringify(creds));
-        console.log(`[WhatsApp] Reset history sync creds for ${userId}`);
-      }
-    } catch (err: any) {
-      console.error(`[WhatsApp] Failed to reset creds for ${userId}:`, err.message);
-    }
 
     try {
       await entry.sock.end(undefined).catch(() => {});

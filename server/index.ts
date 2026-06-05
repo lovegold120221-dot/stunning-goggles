@@ -457,6 +457,42 @@ const getMsg = (e: any) => e?.message || String(e);
     }
   });
 
+// ── WhatsApp Real-Time SSE Stream ──
+// Frontend connects to this endpoint to receive incoming WhatsApp messages live
+app.get('/api/whatsapp/stream/:userId', (req, res) => {
+  const userId = req.params.userId;
+  if (!waManager) { res.status(503).json({ error: 'WhatsApp not available' }); return; }
+
+  // Set SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  // Send initial keepalive
+  res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
+
+  const onMessage = (msg: any) => {
+    try {
+      res.write(`data: ${JSON.stringify({ type: 'message', data: msg })}\n\n`);
+    } catch {}
+  };
+
+  waManager.onSseConnect(userId, onMessage);
+
+  // Keepalive every 30s
+  const keepalive = setInterval(() => {
+    try { res.write(`:keepalive\n\n`); } catch { clearInterval(keepalive); }
+  }, 30000);
+
+  // Cleanup on disconnect
+  req.on('close', () => {
+    clearInterval(keepalive);
+    waManager?.onSseDisconnect(userId, onMessage);
+  });
+});
+
 // ── Web Architect (Website Builder) Routes ──
 
 app.post('/api/website/generate', async (req, res) => {
